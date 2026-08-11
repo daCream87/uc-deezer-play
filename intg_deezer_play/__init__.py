@@ -12,7 +12,7 @@ from intg_deezer_play.config import DeezerConfig
 from intg_deezer_play.driver import DeezerDriver
 from intg_deezer_play.setup_flow import DeezerSetupFlow
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 _LOG = logging.getLogger(__name__)
 
 

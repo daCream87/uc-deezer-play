@@ -56,6 +56,13 @@ class DeezerDevice(PollingDevice):
     def name(self): return self._config.name
     @property
     def address(self): return self._config.server_url
+
+    @property
+    def log_id(self):
+        # Required by ucapi_framework BaseDevice/PollingDevice.
+        # Keep the same proven pattern used by the working Titan integration.
+        return f"{self.name} ({self.address})"
+
     @property
     def state(self): return self._state
     @property
