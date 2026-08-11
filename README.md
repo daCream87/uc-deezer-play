@@ -1,0 +1,52 @@
+# Deezer Play for Unfolded Circle Remote 3
+
+Version 0.1.0 source build based on the proven packaging/runtime architecture of the Philips Titan OS Remote 3 integration, with all Philips-specific communication removed.
+
+## Architecture
+
+Remote 3 -> Deezer Play integration -> local Music Assistant -> Deezer music provider + playback player (recommended: Denon AVC-X4800H via HEOS).
+
+Home Assistant is not required.
+
+## v0.1.0 scope
+
+- Native UC media-player entity with dynamic Now Playing metadata and album artwork URL
+- Play/Pause, Stop, Previous, Next
+- Volume, volume up/down and mute of the selected playback player
+- Seek, Shuffle, Repeat
+- Player selection from Music Assistant players
+- Library browse for playlists, favourite/library tracks, albums and artists
+- Search and Play Media
+- Physical Remote 3 transport/volume buttons through a companion Remote entity
+- Event-triggered state refresh plus 10-second low-frequency fallback polling
+- Automatic reconnect handled by the ucapi-framework device lifecycle plus MA reconnect
+- Persistent Remote configuration
+- Titan-derived AArch64 GitHub Actions packaging structure
+
+## Requirements
+
+1. A Music Assistant Server reachable from Remote 3 on the LAN.
+2. Deezer configured as a Music Provider in Music Assistant.
+3. Denon AVC-X4800H available as a HEOS player in Music Assistant.
+4. A Music Assistant Long-Lived Access Token created in the Music Assistant profile.
+
+Default Music Assistant port: 8095.
+
+## Setup on Remote 3
+
+Enter:
+- Name: `Deezer Play`
+- Music Assistant URL, e.g. `http://192.168.178.20:8095`
+- Long-Lived Access Token
+- Preferred player: `Denon AVC-X4800H` (the integration also tries Denon/HEOS/X4800H automatically)
+
+## Cover art
+
+Album artwork is passed to UC as a dynamic `media_image_url` from the current Music Assistant media object. No custom per-track PNG assets are used.
+
+## Notes
+
+- This project does not implement or invent a Deezer Connect protocol.
+- Flow is intentionally not hard-coded into v0.1.0. It should be added only after the chosen Music Assistant/Deezer provider exposes a stable, verified Flow browse/play entry.
+- Alexa output is intentionally deferred because the current Music Assistant Alexa player provider is experimental; the player abstraction is already designed so it can be exposed later if it appears in Music Assistant.
+- The source ZIP is intended for GitHub Actions AArch64 packaging. The workflow creates the Remote-3 `.tar.gz` artifact in the same proven root layout as the Titan project.

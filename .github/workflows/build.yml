@@ -1,0 +1,97 @@
+name: "Build Deezer Play package"
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  PYTHON_VER: 3.11.12-0.3.0
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Read manifest
+        shell: bash
+        run: |
+          echo "VERSION=$(jq -r '.version' driver.json)" >> "$GITHUB_ENV"
+          echo "DRIVER_ID=$(jq -r '.driver_id' driver.json)" >> "$GITHUB_ENV"
+
+      - name: Build AArch64 driver
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-system-arm binfmt-support qemu-user-static
+          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+          docker run --rm --platform=aarch64 --user=$(id -u):$(id -g) \
+            -v "${GITHUB_WORKSPACE}:/workspace" \
+            docker.io/unfoldedcircle/r2-pyinstaller:${PYTHON_VER} \
+            bash -c "cd /workspace && \
+              python -m pip install -r requirements.txt && \
+              pyinstaller --clean --onedir --name intg-${DRIVER_ID} \
+                --collect-all ucapi \
+                --collect-all ucapi_framework \
+                --collect-all music_assistant_client \
+                --collect-all music_assistant_models \
+                intg_deezer_play/__main__.py"
+
+      - name: Prepare package
+        shell: bash
+        run: |
+          rm -rf artifacts
+          mkdir -p artifacts/bin
+          mv "dist/intg-${DRIVER_ID}/"* artifacts/bin/
+          mv "artifacts/bin/intg-${DRIVER_ID}" artifacts/bin/driver
+          chmod 755 artifacts/bin/driver
+          cp driver.json artifacts/
+          cp assets/driver-logo.png artifacts/
+          echo "ARTIFACT_NAME=uc-intg-${DRIVER_ID}-${VERSION}-aarch64" >> "$GITHUB_ENV"
+
+      - name: Validate
+        shell: bash
+        run: |
+          test -f artifacts/driver.json
+          test -f artifacts/driver-logo.png
+          python - <<'PY'
+          import struct
+          from pathlib import Path
+          logo = Path("artifacts/driver-logo.png")
+          with logo.open("rb") as f:
+              assert f.read(8) == b"\x89PNG\r\n\x1a\n"
+              length = struct.unpack(">I", f.read(4))[0]
+              assert f.read(4) == b"IHDR" and length >= 8
+              width, height = struct.unpack(">II", f.read(8))
+          assert (width, height) == (90, 90), (width, height)
+          print("Logo validated: 90x90")
+          PY
+          test -x artifacts/bin/driver
+          test ! -e artifacts/bin/_internal/driver.json
+          python -m compileall -q intg_deezer_play
+          python - <<'PY'
+          from pathlib import Path
+          src = Path("intg_deezer_play/__init__.py").read_text(encoding="utf-8")
+          assert 'Path(sys.executable).resolve().parent / "driver.json"' in src
+          print("Runtime manifest lookup validated")
+          PY
+          jq -e '.driver_id == "deezer_play" and .version == "0.1.0"' artifacts/driver.json >/dev/null
+
+      - name: Create Remote 3 archive
+        shell: bash
+        run: |
+          cd artifacts
+          tar czf "../${ARTIFACT_NAME}.tar.gz" ./driver-logo.png ./driver.json ./bin/
+          cd ..
+          tar tzf "${ARTIFACT_NAME}.tar.gz" | sed -n '1,30p'
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.ARTIFACT_NAME }}.tar.gz
+          if-no-files-found: error
+          retention-days: 7
