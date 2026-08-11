@@ -1,9 +1,9 @@
 # Deezer Play for Unfolded Circle Remote 3
 
-Version 0.1.1 source build based on the proven packaging/runtime architecture of the Philips Titan OS Remote 3 integration, with all Philips-specific communication removed.
+Version 0.1.2 source build based on the proven packaging/runtime architecture of the Philips Titan OS Remote 3 integration, with all Philips-specific communication removed.
 
 
-## v0.1.1 setup fix
+## v0.1.2 setup fix
 
 - Removes the Music Assistant websocket/API validation from inside the UC setup transaction.
 - The setup form now stores URL/token first; the normal device lifecycle performs the authenticated MA connection afterwards.
@@ -16,7 +16,7 @@ Remote 3 -> Deezer Play integration -> local Music Assistant -> Deezer music pro
 
 Home Assistant is not required.
 
-## v0.1.1 scope
+## v0.1.2 scope
 
 - Native UC media-player entity with dynamic Now Playing metadata and album artwork URL
 - Play/Pause, Stop, Previous, Next
@@ -58,3 +58,9 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 - Flow is intentionally not hard-coded into v0.1.0. It should be added only after the chosen Music Assistant/Deezer provider exposes a stable, verified Flow browse/play entry.
 - Alexa output is intentionally deferred because the current Music Assistant Alexa player provider is experimental; the player abstraction is already designed so it can be exposed later if it appears in Music Assistant.
 - The source ZIP is intended for GitHub Actions AArch64 packaging. The workflow creates the Remote-3 `.tar.gz` artifact in the same proven root layout as the Titan project.
+
+
+## v0.1.2 connection/setup fix
+- Fresh Remote 3 driver ID `deezer_music_play` to avoid stale icon/config association.
+- Music Assistant listener now waits for authenticated initial state before polling players.
+- Existing Titan-derived package layout remains unchanged.

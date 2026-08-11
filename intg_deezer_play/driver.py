@@ -7,4 +7,4 @@ from intg_deezer_play.remote import DeezerRemote
 
 class DeezerDriver(BaseIntegrationDriver[DeezerDevice, DeezerConfig]):
     def __init__(self):
-        super().__init__(device_class=DeezerDevice, entity_classes=[DeezerMediaPlayer, DeezerRemote], driver_id="deezer_play")
+        super().__init__(device_class=DeezerDevice, entity_classes=[DeezerMediaPlayer, DeezerRemote], driver_id="deezer_music_play")

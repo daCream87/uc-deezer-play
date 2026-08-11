@@ -86,7 +86,7 @@ jobs:
           compile(source, "setup_flow.py", "exec")
           print("Setup flow validated: no in-transaction Music Assistant connection")
           PY
-          jq -e '.driver_id == "deezer_play" and .version == "0.1.1"' artifacts/driver.json >/dev/null
+          jq -e '.driver_id == "deezer_music_play" and .version == "0.1.2"' artifacts/driver.json >/dev/null
 
       - name: Create Remote 3 archive
         shell: bash
