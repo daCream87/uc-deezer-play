@@ -6,8 +6,6 @@ from urllib.parse import urlparse
 
 from ucapi import RequestUserInput
 from ucapi_framework import BaseSetupFlow
-from music_assistant_client import MusicAssistantClient
-
 from intg_deezer_play.config import DeezerConfig
 
 
@@ -17,7 +15,7 @@ class DeezerSetupFlow(BaseSetupFlow[DeezerConfig]):
             {"en": "Deezer Play Setup", "de": "Deezer Play einrichten"},
             [
                 {"id": "name", "label": {"en": "Name", "de": "Name"}, "field": {"text": {"value": "Deezer Play"}}},
-                {"id": "server_url", "label": {"en": "Music Assistant URL", "de": "Music-Assistant-URL"}, "field": {"text": {"value": "http://music-assistant.local:8095"}}},
+                {"id": "server_url", "label": {"en": "Music Assistant URL", "de": "Music-Assistant-URL"}, "field": {"text": {"value": "http://192.168.178.46:8095"}}},
                 {"id": "access_token", "label": {"en": "Long-lived access token", "de": "Long-Lived Access Token"}, "field": {"text": {"value": ""}}},
                 {"id": "preferred_player_name", "label": {"en": "Preferred player", "de": "Bevorzugter Player"}, "field": {"text": {"value": "Denon AVC-X4800H"}}},
             ],
@@ -34,16 +32,11 @@ class DeezerSetupFlow(BaseSetupFlow[DeezerConfig]):
         if not token:
             raise ValueError("A Music Assistant long-lived access token is required")
 
-        # Validate authentication without keeping a second setup session alive.
-        try:
-            client = MusicAssistantClient(server_url, None, token=token)
-            await client.__aenter__()
-            try:
-                await client.send_command("players/all")
-            finally:
-                await client.__aexit__(None, None, None)
-        except Exception as err:
-            raise ValueError(f"Music Assistant connection failed: {type(err).__name__}: {err}") from err
+        # Important: do not open a Music Assistant websocket inside the UC setup
+        # transaction. BaseSetupFlow maps any exception from query_device() to
+        # IntegrationSetupError.NOT_FOUND, which makes transient auth/network
+        # failures look like a broken integration. The persisted device performs
+        # the real authenticated connection after setup completes.
 
         digest = hashlib.sha1(server_url.encode("utf-8"), usedforsecurity=False).hexdigest()[:10]
         return DeezerConfig(

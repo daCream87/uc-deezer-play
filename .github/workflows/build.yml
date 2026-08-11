@@ -78,7 +78,15 @@ jobs:
           assert 'Path(sys.executable).resolve().parent / "driver.json"' in src
           print("Runtime manifest lookup validated")
           PY
-          jq -e '.driver_id == "deezer_play" and .version == "0.1.0"' artifacts/driver.json >/dev/null
+          python - <<'PY'
+          from pathlib import Path
+          source = Path("intg_deezer_play/setup_flow.py").read_text(encoding="utf-8")
+          assert "MusicAssistantClient" not in source, "Setup flow must not open MA sessions"
+          assert "http://192.168.178.46:8095" in source
+          compile(source, "setup_flow.py", "exec")
+          print("Setup flow validated: no in-transaction Music Assistant connection")
+          PY
+          jq -e '.driver_id == "deezer_play" and .version == "0.1.1"' artifacts/driver.json >/dev/null
 
       - name: Create Remote 3 archive
         shell: bash
