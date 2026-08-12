@@ -3,7 +3,7 @@
 Version 0.1.4 source build based on the proven packaging/runtime architecture of the Philips Titan OS Remote 3 integration, with all Philips-specific communication removed.
 
 
-## v0.1.4 setup fix
+## v0.1.4 Connect fix
 
 - Removes the Music Assistant websocket/API validation from inside the UC setup transaction.
 - The setup form now stores URL/token first; the normal device lifecycle performs the authenticated MA connection afterwards.
