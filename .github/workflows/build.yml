@@ -49,18 +49,18 @@ jobs:
           mv "artifacts/bin/intg-${DRIVER_ID}" artifacts/bin/driver
           chmod 755 artifacts/bin/driver
           cp driver.json artifacts/
-          cp assets/driver-logo.png artifacts/
+          cp assets/music-play-logo.png artifacts/
           echo "ARTIFACT_NAME=uc-intg-${DRIVER_ID}-${VERSION}-aarch64" >> "$GITHUB_ENV"
 
       - name: Validate
         shell: bash
         run: |
           test -f artifacts/driver.json
-          test -f artifacts/driver-logo.png
+          test -f artifacts/music-play-logo.png
           python - <<'PY'
           import struct
           from pathlib import Path
-          logo = Path("artifacts/driver-logo.png")
+          logo = Path("artifacts/music-play-logo.png")
           with logo.open("rb") as f:
               assert f.read(8) == b"\x89PNG\r\n\x1a\n"
               length = struct.unpack(">I", f.read(4))[0]
@@ -86,7 +86,7 @@ jobs:
           compile(source, "setup_flow.py", "exec")
           print("Setup flow validated: no in-transaction Music Assistant connection")
           PY
-          jq -e '.driver_id == "music_play" and .version == "0.2.2"' artifacts/driver.json >/dev/null
+          jq -e '.driver_id == "music_play" and .version == "0.2.3"' artifacts/driver.json >/dev/null
           python - <<'PY'
           from pathlib import Path
           source = Path("intg_deezer_play/driver.py").read_text(encoding="utf-8")
@@ -99,7 +99,7 @@ jobs:
         shell: bash
         run: |
           cd artifacts
-          tar czf "../${ARTIFACT_NAME}.tar.gz" ./driver-logo.png ./driver.json ./bin/
+          tar czf "../${ARTIFACT_NAME}.tar.gz" ./music-play-logo.png ./driver.json ./bin/
           cd ..
           tar tzf "${ARTIFACT_NAME}.tar.gz" | sed -n '1,30p'
 

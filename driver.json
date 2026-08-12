@@ -1,12 +1,12 @@
 {
   "driver_id": "music_play",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "min_core_api": "0.22.0",
   "name": {
     "en": "Music Play",
     "de": "Music Play"
   },
-  "icon": "custom:driver-logo.png",
+  "icon": "custom:music-play-logo.png",
   "description": {
     "en": "Music control for Remote 3 through a local Music Assistant server. Works with music providers configured in Music Assistant.",
     "de": "Musiksteuerung für Remote 3 über einen lokalen Music-Assistant-Server. Funktioniert mit den in Music Assistant eingerichteten Musikquellen."

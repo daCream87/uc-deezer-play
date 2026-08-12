@@ -514,16 +514,35 @@ async def send(self, command: str, **kwargs) -> bool:
                 await self._client.command("player_queues/clear", queue_id=pid)
 
         elif command == "play_media":
-            media_id = str(kwargs["media_id"])
-            option = str(kwargs.get("option", "play")).lower()
-            if option not in {"play", "next", "add"}:
-                option = "play"
-            await self._client.command(
-                "player_queues/play_media",
-                queue_id=pid,
-                media=media_id,
-                option=option,
-            )
+            media_id = str(kwargs["media_id"]).strip()
+            option_name = str(kwargs.get("option", "play")).lower()
+            if option_name not in {"play", "next", "add"}:
+                option_name = "play"
+
+            if queues and hasattr(queues, "play_media"):
+                try:
+                    from music_assistant_models.enums import QueueOption
+
+                    queue_option = {
+                        "play": QueueOption.PLAY,
+                        "next": QueueOption.NEXT,
+                        "add": QueueOption.ADD,
+                    }[option_name]
+                except Exception:
+                    queue_option = option_name
+
+                await queues.play_media(
+                    pid,
+                    media_id,
+                    option=queue_option,
+                )
+            else:
+                await self._client.command(
+                    "player_queues/play_media",
+                    queue_id=pid,
+                    media=media_id,
+                    option=option_name,
+                )
         else:
             return False
 

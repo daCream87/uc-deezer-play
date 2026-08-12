@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import logging
 from datetime import datetime, timezone
@@ -38,9 +37,8 @@ class DeezerMediaPlayer(MediaPlayerEntity):
 
     def __init__(self, device_config: DeezerConfig, device: DeezerDevice):
         self._device = device
-        # UC limits BrowseMediaItem.media_id to 255 chars. Keep the full MA
-        # reference locally and expose only a deterministic short token.
-        self._media_refs: dict[str, dict[str, Any]] = {}
+        # Browse items use Music Assistant's canonical URI whenever possible.
+        # This survives reconnects/restarts and stays UC-safe.
         self._last_playlist_ref: dict[str, Any] | None = None
         self._open_last_playlist_once = False
         super().__init__(
@@ -96,7 +94,7 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                     "LAST_PLAYLIST",
                 ],
             },
-            icon="custom:driver-logo.png",
+            icon="custom:music-play-logo.png",
             cmd_handler=self._handle_command,
         )
         self.subscribe_to_device(device)
@@ -225,20 +223,37 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             elif cmd_id == Commands.CLEAR_PLAYLIST:
                 ok = await self._device.send("clear_queue")
             elif cmd_id == Commands.PLAY_MEDIA:
-                raw_id = str(p.get("media_id", ""))
+                raw_id = str(p.get("media_id", "")).strip()
                 ref = self._decode_ref(raw_id)
-                playable_uri = str(ref.get("uri") or raw_id)
+                playable_uri = str(ref.get("uri") or raw_id).strip()
+
+                if not playable_uri or playable_uri.startswith("musicplay://"):
+                    _LOG.error(
+                        "PLAY_MEDIA has no playable Music Assistant URI: media_id=%s ref=%s params=%s",
+                        raw_id,
+                        ref,
+                        p,
+                    )
+                    return StatusCodes.BAD_REQUEST
+
                 action = str(
                     p.get("action", MediaPlayAction.PLAY_NOW)
-                ).upper()
+                ).split(".")[-1].upper()
                 option = {
-                    MediaPlayAction.PLAY_NOW: "play",
-                    MediaPlayAction.PLAY_NEXT: "next",
-                    MediaPlayAction.ADD_TO_QUEUE: "add",
                     "PLAY_NOW": "play",
                     "PLAY_NEXT": "next",
                     "ADD_TO_QUEUE": "add",
+                    "PLAY": "play",
+                    "NEXT": "next",
+                    "ADD": "add",
                 }.get(action, "play")
+
+                _LOG.info(
+                    "PLAY_MEDIA uri=%s option=%s player=%s",
+                    playable_uri,
+                    option,
+                    self._device.state.player_id,
+                )
                 ok = await self._device.send(
                     "play_media",
                     media_id=playable_uri,
@@ -713,19 +728,71 @@ class DeezerMediaPlayer(MediaPlayerEntity):
         return getattr(obj, name, default)
 
     def _encode_ref(self, data: dict[str, Any]) -> str:
-        """Store full MA refs locally and expose a UC-safe short media_id."""
-        raw = json.dumps(
-            data,
-            ensure_ascii=False,
-            sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-        token = hashlib.sha1(raw).hexdigest()[:24]
-        self._media_refs[token] = dict(data)
-        return f"musicplay://m/{token}"
+        """Return a persistent UC-safe media id."""
+        uri = str(data.get("uri") or "").strip()
+        if uri and len(uri) <= 255:
+            return uri
+
+        media_type = str(data.get("media_type") or "media").strip()
+        provider = str(data.get("provider") or "library").strip()
+        item_id = str(data.get("item_id") or "").strip()
+
+        def esc(value: str) -> str:
+            return (
+                value.replace("%", "%25")
+                .replace("/", "%2F")
+                .replace("|", "%7C")
+            )
+
+        compact = f"musicplay://ref/{esc(media_type)}|{esc(provider)}|{esc(item_id)}"
+        if len(compact) > 255:
+            compact = f"musicplay://ref/{esc(media_type)}||{esc(item_id)}"
+        return compact[:255]
 
     def _decode_ref(self, value: str) -> dict[str, Any]:
-        prefix = "musicplay://m/"
+        """Decode a Music Assistant URI or compact Music Play reference."""
+        value = str(value or "").strip()
+        if not value:
+            return {}
+
+        if "://" in value and not value.startswith("musicplay://"):
+            provider, rest = value.split("://", 1)
+            if "/" in rest:
+                media_type, item_id = rest.split("/", 1)
+            else:
+                media_type, item_id = "", rest
+            return {
+                "kind": "media",
+                "media_type": media_type,
+                "item_id": item_id,
+                "provider": provider,
+                "uri": value,
+            }
+
+        prefix = "musicplay://ref/"
         if not value.startswith(prefix):
             return {}
-        return dict(self._media_refs.get(value[len(prefix):], {}))
+
+        def unesc(part: str) -> str:
+            return (
+                part.replace("%7C", "|")
+                .replace("%2F", "/")
+                .replace("%25", "%")
+            )
+
+        parts = value[len(prefix):].split("|", 2)
+        while len(parts) < 3:
+            parts.append("")
+        media_type, provider, item_id = map(unesc, parts)
+        uri = (
+            f"{provider}://{media_type}/{item_id}"
+            if provider and media_type and item_id
+            else ""
+        )
+        return {
+            "kind": "media",
+            "media_type": media_type,
+            "item_id": item_id,
+            "provider": provider or "library",
+            "uri": uri,
+        }
