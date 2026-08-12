@@ -41,6 +41,8 @@ class DeezerMediaPlayer(MediaPlayerEntity):
         # UC limits BrowseMediaItem.media_id to 255 chars. Keep the full MA
         # reference locally and expose only a deterministic short token.
         self._media_refs: dict[str, dict[str, Any]] = {}
+        self._last_playlist_ref: dict[str, Any] | None = None
+        self._open_last_playlist_once = False
         super().__init__(
             f"media_player.{device_config.identifier}",
             device_config.name,
@@ -49,6 +51,10 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                 Features.STOP,
                 Features.PREVIOUS,
                 Features.NEXT,
+                Features.FAST_FORWARD,
+                Features.REWIND,
+                Features.DPAD,
+                Features.MENU,
                 Features.VOLUME,
                 Features.VOLUME_UP_DOWN,
                 Features.MUTE_TOGGLE,
@@ -84,10 +90,15 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                 ],
             },
             device_class=DeviceClasses.RECEIVER,
+            options={
+                "simple_commands": [
+                    "SHUFFLE_TOGGLE",
+                    "LAST_PLAYLIST",
+                ],
+            },
+            icon="custom:driver-logo.png",
             cmd_handler=self._handle_command,
         )
-        # Entity overview icon (separate from the integration/driver icon).
-        self.icon = "custom:driver-logo.png"
         self.subscribe_to_device(device)
 
     async def sync_state(self) -> None:
@@ -113,15 +124,10 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                 Attributes.MEDIA_ARTIST: state.artist,
                 Attributes.MEDIA_ALBUM: state.album,
                 Attributes.MEDIA_DURATION: state.duration,
-                Attributes.MEDIA_POSITION: state.position,
-                Attributes.MEDIA_POSITION_UPDATED_AT: (
-                    datetime.fromtimestamp(
-                        state.position_updated_at,
-                        tz=timezone.utc,
-                    ).isoformat()
-                    if state.position_updated_at > 0
-                    else None
-                ),
+                Attributes.MEDIA_POSITION: self._device.current_position(),
+                Attributes.MEDIA_POSITION_UPDATED_AT: datetime.now(
+                    timezone.utc
+                ).isoformat(),
                 Attributes.MEDIA_IMAGE_URL: state.image_url,
                 Attributes.MEDIA_ID: state.media_id,
                 Attributes.MEDIA_PLAYLIST: state.playlist,
@@ -161,6 +167,27 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                 ok = await self._device.send("next")
             elif cmd_id == Commands.PREVIOUS:
                 ok = await self._device.send("previous")
+            elif cmd_id in (Commands.FAST_FORWARD, Commands.CURSOR_RIGHT):
+                ok = await self._device.send("skip", seconds=10)
+            elif cmd_id in (Commands.REWIND, Commands.CURSOR_LEFT):
+                ok = await self._device.send("skip", seconds=-10)
+            elif cmd_id == Commands.CURSOR_UP:
+                ok = await self._device.send("next")
+            elif cmd_id == Commands.CURSOR_DOWN:
+                ok = await self._device.send("previous")
+            elif cmd_id == Commands.CURSOR_ENTER:
+                ok = await self._device.send("play_pause")
+            elif cmd_id == Commands.MENU or cmd_id == "LAST_PLAYLIST":
+                # Core does not expose an integration command that can force-open
+                # the media browser. Arm a one-shot jump so the next browser
+                # request lands directly in the last opened playlist.
+                self._open_last_playlist_once = self._last_playlist_ref is not None
+                ok = True
+            elif cmd_id == "SHUFFLE_TOGGLE":
+                ok = await self._device.send(
+                    "shuffle",
+                    enabled=not self._device.state.shuffle,
+                )
             elif cmd_id == Commands.VOLUME_UP:
                 ok = await self._device.send("volume_up")
             elif cmd_id == Commands.VOLUME_DOWN:
@@ -173,12 +200,13 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                     volume=p.get("volume", 0),
                 )
             elif cmd_id == Commands.SEEK:
+                raw_position = p.get("media_position", p.get("position"))
+                if raw_position is None:
+                    _LOG.error("Seek command missing media_position: %s", p)
+                    return StatusCodes.BAD_REQUEST
                 ok = await self._device.send(
                     "seek",
-                    position=p.get(
-                        "media_position",
-                        p.get("position", 0),
-                    ),
+                    position=float(raw_position),
                 )
             elif cmd_id == Commands.SHUFFLE:
                 ok = await self._device.send(
@@ -236,6 +264,9 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             media_id = options.media_id or "root"
 
             if media_id == "root":
+                if self._open_last_playlist_once and self._last_playlist_ref:
+                    self._open_last_playlist_once = False
+                    return await self._browse_playlist(self._last_playlist_ref)
                 items = [
                     BrowseMediaItem(
                         media_id="musicplay://queue",
@@ -384,6 +415,7 @@ class DeezerMediaPlayer(MediaPlayerEntity):
         )
 
     async def _browse_playlist(self, ref: dict[str, Any]) -> BrowseResults:
+        self._last_playlist_ref = dict(ref)
         item_id = str(ref.get("item_id", ""))
         provider = str(ref.get("provider", "library"))
         rows = await self._device._client.command(
