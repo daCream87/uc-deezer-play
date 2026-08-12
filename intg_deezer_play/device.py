@@ -22,6 +22,14 @@ def _get(obj: Any, name: str, default=None):
     return getattr(obj, name, default)
 
 
+def _enum_value(value: Any, default: str = "") -> str:
+    """Return enum.value when available, otherwise a plain string."""
+    if value is None:
+        return default
+    raw = getattr(value, "value", value)
+    return str(raw)
+
+
 @dataclass
 class MusicState:
     online: bool = False
@@ -37,6 +45,7 @@ class MusicState:
     image_url: str = ""
     duration: int = 0
     position: int = 0
+    position_updated_at: float = 0.0
     shuffle: bool = False
     repeat: str = "OFF"
     media_id: str = ""
@@ -179,13 +188,25 @@ class DeezerDevice(PollingDevice):
 
         # Most reliable artwork source is the player's PlayerMedia object.
         # MA resolves provider artwork/imageproxy URLs there.
-        image = (
-            _get(player_media, "image_url", "")
-            or _get(current, "image_url", "")
-            or _get(media, "image_url", "")
-            or _get(metadata, "image_url", "")
-        )
-        image_url = self.absolute_image_url(image)
+        image_url = ""
+        # Match the official Music Assistant HA integration: ask the client
+        # for the canonical artwork URL for the current queue item first.
+        ma_client = self._client.client
+        get_image_url = getattr(ma_client, "get_media_item_image_url", None)
+        if callable(get_image_url) and current is not None:
+            try:
+                image_url = str(get_image_url(current) or "")
+            except Exception:
+                _LOG.debug("Canonical MA artwork URL lookup failed", exc_info=True)
+
+        if not image_url:
+            image = (
+                _get(player_media, "image_url", "")
+                or _get(current, "image_url", "")
+                or _get(media, "image_url", "")
+                or _get(metadata, "image_url", "")
+            )
+            image_url = self.absolute_image_url(image)
 
         title = str(
             _get(
@@ -204,9 +225,35 @@ class DeezerDevice(PollingDevice):
             or 0
         )
 
-        queue_state = str(
-            _get(queue, "state", _get(selected, "playback_state", _get(selected, "state", "IDLE")))
+        queue_state = _enum_value(
+            _get(
+                queue,
+                "state",
+                _get(selected, "playback_state", _get(selected, "state", "IDLE")),
+            ),
+            "IDLE",
         ).upper()
+
+        # Music Assistant provides a position *and* the timestamp at which that
+        # position was measured. UC extrapolates playback from this anchor.
+        # Never replace this timestamp with "now" on every poll, otherwise the
+        # Remote freezes at the last sampled position.
+        position = float(
+            _get(
+                queue,
+                "elapsed_time",
+                _get(selected, "elapsed_time", 0),
+            )
+            or 0
+        )
+        position_updated_at = float(
+            _get(
+                queue,
+                "elapsed_time_last_updated",
+                _get(selected, "elapsed_time_last_updated", 0),
+            )
+            or 0
+        )
 
         self._state = MusicState(
             online=True,
@@ -223,7 +270,8 @@ class DeezerDevice(PollingDevice):
             album=album,
             image_url=image_url,
             duration=duration,
-            position=int(float(_get(queue, "elapsed_time", 0) or 0)),
+            position=int(position),
+            position_updated_at=position_updated_at,
             shuffle=bool(_get(queue, "shuffle_enabled", False)),
             repeat=str(_get(queue, "repeat_mode", "OFF") or "OFF")
             .upper()

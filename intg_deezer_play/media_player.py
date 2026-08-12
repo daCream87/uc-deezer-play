@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import base64
+import hashlib
 import json
 import logging
 from datetime import datetime, timezone
@@ -38,6 +38,9 @@ class DeezerMediaPlayer(MediaPlayerEntity):
 
     def __init__(self, device_config: DeezerConfig, device: DeezerDevice):
         self._device = device
+        # UC limits BrowseMediaItem.media_id to 255 chars. Keep the full MA
+        # reference locally and expose only a deterministic short token.
+        self._media_refs: dict[str, dict[str, Any]] = {}
         super().__init__(
             f"media_player.{device_config.identifier}",
             device_config.name,
@@ -83,6 +86,8 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             device_class=DeviceClasses.RECEIVER,
             cmd_handler=self._handle_command,
         )
+        # Entity overview icon (separate from the integration/driver icon).
+        self.icon = "custom:driver-logo.png"
         self.subscribe_to_device(device)
 
     async def sync_state(self) -> None:
@@ -109,9 +114,14 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                 Attributes.MEDIA_ALBUM: state.album,
                 Attributes.MEDIA_DURATION: state.duration,
                 Attributes.MEDIA_POSITION: state.position,
-                Attributes.MEDIA_POSITION_UPDATED_AT: datetime.now(
-                    timezone.utc
-                ).isoformat(),
+                Attributes.MEDIA_POSITION_UPDATED_AT: (
+                    datetime.fromtimestamp(
+                        state.position_updated_at,
+                        tz=timezone.utc,
+                    ).isoformat()
+                    if state.position_updated_at > 0
+                    else None
+                ),
                 Attributes.MEDIA_IMAGE_URL: state.image_url,
                 Attributes.MEDIA_ID: state.media_id,
                 Attributes.MEDIA_PLAYLIST: state.playlist,
@@ -607,19 +617,34 @@ class DeezerMediaPlayer(MediaPlayerEntity):
         )
 
     def _extract_artwork(self, obj: Any) -> str | None:
-        # Use only concrete URLs surfaced by MA/model objects.
+        """Resolve artwork through MA's canonical schema-31 image proxy."""
+        # Direct URLs are fine when Music Assistant already provides one.
         for candidate in (
             self._get(obj, "image_url", None),
-            self._get(self._get(obj, "image", None), "path", None),
             self._get(self._get(obj, "metadata", None), "image_url", None),
         ):
             value = self._safe_thumbnail(candidate)
             if value:
                 return value
 
+        # Schema >=31 exposes proxy_id on MediaItemImage. This is the canonical
+        # identifier for /imageproxy/<proxy_id>.
+        candidates = []
+        direct_image = self._get(obj, "image", None)
+        if direct_image:
+            candidates.append(direct_image)
         metadata = self._get(obj, "metadata", None)
-        images = self._get(metadata, "images", []) or []
-        for image in images:
+        candidates.extend(self._get(metadata, "images", []) or [])
+
+        for image in candidates:
+            proxy_id = self._get(image, "proxy_id", None)
+            if proxy_id:
+                return (
+                    f"{self._device.server_url}/imageproxy/{proxy_id}"
+                    "?size=480&fmt=jpg"
+                )
+            # Older server/client fallback: only use a path if it is already
+            # a concrete URL or MA-relative HTTP path.
             path = self._get(image, "path", None)
             value = self._safe_thumbnail(path)
             if value:
@@ -655,26 +680,20 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             return obj.get(name, default)
         return getattr(obj, name, default)
 
-    @staticmethod
-    def _encode_ref(data: dict[str, Any]) -> str:
+    def _encode_ref(self, data: dict[str, Any]) -> str:
+        """Store full MA refs locally and expose a UC-safe short media_id."""
         raw = json.dumps(
             data,
             ensure_ascii=False,
+            sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
-        token = base64.urlsafe_b64encode(raw).decode("ascii").rstrip("=")
-        return f"musicplay://ref/{token}"
+        token = hashlib.sha1(raw).hexdigest()[:24]
+        self._media_refs[token] = dict(data)
+        return f"musicplay://m/{token}"
 
-    @staticmethod
-    def _decode_ref(value: str) -> dict[str, Any]:
-        prefix = "musicplay://ref/"
+    def _decode_ref(self, value: str) -> dict[str, Any]:
+        prefix = "musicplay://m/"
         if not value.startswith(prefix):
             return {}
-        token = value[len(prefix):]
-        token += "=" * (-len(token) % 4)
-        try:
-            return json.loads(
-                base64.urlsafe_b64decode(token.encode("ascii")).decode("utf-8")
-            )
-        except Exception:
-            return {}
+        return dict(self._media_refs.get(value[len(prefix):], {}))
