@@ -4,6 +4,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Any
+from urllib.parse import urljoin
 
 from ucapi_framework import PollingDevice
 
@@ -44,29 +45,46 @@ class MusicState:
 
 class DeezerDevice(PollingDevice):
     def __init__(self, device_config: DeezerConfig, **kwargs):
-        super().__init__(device_config, poll_interval=device_config.poll_interval, **kwargs)
+        super().__init__(
+            device_config,
+            poll_interval=device_config.poll_interval,
+            **kwargs,
+        )
         self._config = device_config
-        self._client = MusicPlayMAClient(device_config.server_url, device_config.access_token)
+        self._client = MusicPlayMAClient(
+            device_config.server_url,
+            device_config.access_token,
+        )
         self._state = MusicState()
         self._event_refresh_task: asyncio.Task | None = None
 
     @property
-    def identifier(self): return self._config.identifier
+    def identifier(self):
+        return self._config.identifier
+
     @property
-    def name(self): return self._config.name
+    def name(self):
+        return self._config.name
+
     @property
-    def address(self): return self._config.server_url
+    def address(self):
+        return self._config.server_url
 
     @property
     def log_id(self):
-        # Required by ucapi_framework BaseDevice/PollingDevice.
-        # Keep the same proven pattern used by the working Titan integration.
         return f"{self.name} ({self.address})"
 
     @property
-    def state(self): return self._state
+    def state(self):
+        return self._state
+
     @property
-    def client(self): return self._client.client
+    def client(self):
+        return self._client.client
+
+    @property
+    def server_url(self) -> str:
+        return self._config.server_url.rstrip("/")
 
     async def establish_connection(self):
         await self._client.start(self._on_event)
@@ -81,7 +99,7 @@ class DeezerDevice(PollingDevice):
         await super().disconnect()
 
     def _on_event(self, _event: Any) -> None:
-        # Collapse event bursts to one refresh and keep the UC status event-driven.
+        # Collapse event bursts into one refresh.
         if self._event_refresh_task and not self._event_refresh_task.done():
             return
         self._event_refresh_task = asyncio.create_task(self._refresh_after_event())
@@ -93,17 +111,37 @@ class DeezerDevice(PollingDevice):
         except Exception:
             _LOG.debug("Event refresh failed", exc_info=True)
 
+    def absolute_image_url(self, value: Any) -> str:
+        """Return a Remote-3 reachable image URL without guessing MA endpoints."""
+        if not value:
+            return ""
+        value = str(value).strip()
+        if value.startswith(("http://", "https://")):
+            return value
+        # Player.current_media can expose MA-owned relative imageproxy URLs.
+        if value.startswith("/"):
+            return urljoin(self.server_url + "/", value.lstrip("/"))
+        return ""
+
     async def poll_device(self):
         players = await self._client.players()
-        pairs = [(str(_get(p, "player_id", "")), str(_get(p, "display_name", _get(p, "name", "Player")))) for p in players]
+        pairs = [
+            (
+                str(_get(p, "player_id", "")),
+                str(_get(p, "display_name", _get(p, "name", "Player"))),
+            )
+            for p in players
+        ]
         pairs = [(pid, name) for pid, name in pairs if pid]
         selected = self._select_player(players)
+
         if not selected:
             self._state = MusicState(online=True, players=pairs)
             self.push_update()
             return
 
         player_id = str(_get(selected, "player_id", ""))
+
         queue = None
         try:
             queue = await self._client.queue(player_id)
@@ -112,33 +150,95 @@ class DeezerDevice(PollingDevice):
 
         current = _get(queue, "current_item", None)
         media = _get(current, "media_item", current)
+        player_media = _get(selected, "current_media", None)
+
         metadata = _get(media, "metadata", None)
         artists = _get(media, "artists", []) or []
-        artist = ", ".join(str(_get(a, "name", a)) for a in artists) if artists else str(_get(media, "artist", ""))
-        album_obj = _get(media, "album", None)
-        album = str(_get(album_obj, "name", _get(media, "album_name", "")) or "")
-        image = _get(metadata, "image_url", "") or _get(media, "image_url", "") or _get(current, "image_url", "")
+        artist = (
+            ", ".join(str(_get(a, "name", a)) for a in artists)
+            if artists
+            else str(
+                _get(
+                    player_media,
+                    "artist",
+                    _get(media, "artist", ""),
+                )
+                or ""
+            )
+        )
 
-        queue_state = str(_get(queue, "state", _get(selected, "state", "IDLE"))).upper()
+        album_obj = _get(media, "album", None)
+        album = str(
+            _get(
+                player_media,
+                "album",
+                _get(album_obj, "name", _get(media, "album_name", "")),
+            )
+            or ""
+        )
+
+        # Most reliable artwork source is the player's PlayerMedia object.
+        # MA resolves provider artwork/imageproxy URLs there.
+        image = (
+            _get(player_media, "image_url", "")
+            or _get(current, "image_url", "")
+            or _get(media, "image_url", "")
+            or _get(metadata, "image_url", "")
+        )
+        image_url = self.absolute_image_url(image)
+
+        title = str(
+            _get(
+                player_media,
+                "title",
+                _get(media, "name", _get(current, "name", "")),
+            )
+            or ""
+        )
+        duration = int(
+            _get(
+                player_media,
+                "duration",
+                _get(current, "duration", _get(media, "duration", 0)),
+            )
+            or 0
+        )
+
+        queue_state = str(
+            _get(queue, "state", _get(selected, "playback_state", _get(selected, "state", "IDLE")))
+        ).upper()
+
         self._state = MusicState(
             online=True,
             player_id=player_id,
-            player_name=str(_get(selected, "display_name", _get(selected, "name", player_id))),
+            player_name=str(
+                _get(selected, "display_name", _get(selected, "name", player_id))
+            ),
             players=pairs,
             state=queue_state,
             volume=int(_get(selected, "volume_level", 0) or 0),
             muted=bool(_get(selected, "volume_muted", False)),
-            title=str(_get(media, "name", _get(current, "name", "")) or ""),
+            title=title,
             artist=artist,
             album=album,
-            image_url=str(image or ""),
-            duration=int(_get(queue, "current_item", None) and (_get(current, "duration", 0) or _get(media, "duration", 0) or 0) or 0),
+            image_url=image_url,
+            duration=duration,
             position=int(float(_get(queue, "elapsed_time", 0) or 0)),
             shuffle=bool(_get(queue, "shuffle_enabled", False)),
-            repeat=str(_get(queue, "repeat_mode", "OFF") or "OFF").upper().split(".")[-1],
-            media_id=str(_get(media, "uri", _get(current, "uri", "")) or ""),
+            repeat=str(_get(queue, "repeat_mode", "OFF") or "OFF")
+            .upper()
+            .split(".")[-1],
+            media_id=str(
+                _get(
+                    player_media,
+                    "uri",
+                    _get(media, "uri", _get(current, "uri", "")),
+                )
+                or ""
+            ),
             playlist=str(_get(queue, "display_name", "") or ""),
         )
+
         self._config.default_player_id = player_id
         self.push_update()
 
@@ -147,17 +247,27 @@ class DeezerDevice(PollingDevice):
             for player in players:
                 if str(_get(player, "player_id", "")) == self._config.default_player_id:
                     return player
+
         preferred = self._config.preferred_player_name.lower().strip()
         if preferred:
             for player in players:
-                name = str(_get(player, "display_name", _get(player, "name", ""))).lower()
-                if preferred in name or ("x4800" in preferred and "x4800" in name):
+                name = str(
+                    _get(player, "display_name", _get(player, "name", ""))
+                ).lower()
+                if preferred in name or (
+                    "x4800" in preferred and "x4800" in name
+                ):
                     return player
-        # Prefer HEOS/Denon when possible, otherwise first available player.
+
         for player in players:
-            text = f"{_get(player, 'provider', '')} {_get(player, 'display_name', '')} {_get(player, 'name', '')}".lower()
+            text = (
+                f"{_get(player, 'provider', '')} "
+                f"{_get(player, 'display_name', '')} "
+                f"{_get(player, 'name', '')}"
+            ).lower()
             if "heos" in text or "denon" in text or "x4800" in text:
                 return player
+
         return players[0] if players else None
 
     async def select_player(self, value: str) -> bool:
@@ -168,26 +278,105 @@ class DeezerDevice(PollingDevice):
                 return True
         return False
 
+    async def queue_items(self, limit: int = 100, offset: int = 0) -> list[Any]:
+        pid = self._state.player_id
+        if not pid:
+            return []
+        rows = await self._client.command(
+            "player_queues/items",
+            queue_id=pid,
+            limit=limit,
+            offset=offset,
+        )
+        return list(rows or [])
+
     async def send(self, command: str, **kwargs) -> bool:
         pid = self._state.player_id
         if not pid:
             return False
+
         try:
-            if command == "play_pause": await self._client.command("player_queues/play_pause", queue_id=pid)
-            elif command == "stop": await self._client.command("players/cmd/stop", player_id=pid)
-            elif command == "next": await self._client.command("players/cmd/next", player_id=pid)
-            elif command == "previous": await self._client.command("players/cmd/previous", player_id=pid)
-            elif command == "volume_up": await self._client.command("players/cmd/volume_up", player_id=pid)
-            elif command == "volume_down": await self._client.command("players/cmd/volume_down", player_id=pid)
-            elif command == "mute_toggle": await self._client.command("players/cmd/volume_mute", player_id=pid, muted=not self._state.muted)
-            elif command == "shuffle": await self._client.command("player_queues/shuffle", queue_id=pid, shuffle_enabled=bool(kwargs["enabled"]))
-            elif command == "repeat": await self._client.command("player_queues/repeat", queue_id=pid, repeat_mode=str(kwargs["mode"]).lower())
-            elif command == "seek": await self._client.command("player_queues/seek", queue_id=pid, position=float(kwargs["position"]))
-            elif command == "volume": await self._client.command("players/cmd/volume_set", player_id=pid, volume_level=int(kwargs["volume"]))
+            if command == "play_pause":
+                await self._client.command(
+                    "player_queues/play_pause",
+                    queue_id=pid,
+                )
+            elif command == "stop":
+                await self._client.command(
+                    "players/cmd/stop",
+                    player_id=pid,
+                )
+            elif command == "next":
+                await self._client.command(
+                    "players/cmd/next",
+                    player_id=pid,
+                )
+            elif command == "previous":
+                await self._client.command(
+                    "players/cmd/previous",
+                    player_id=pid,
+                )
+            elif command == "volume_up":
+                await self._client.command(
+                    "players/cmd/volume_up",
+                    player_id=pid,
+                )
+            elif command == "volume_down":
+                await self._client.command(
+                    "players/cmd/volume_down",
+                    player_id=pid,
+                )
+            elif command == "mute_toggle":
+                await self._client.command(
+                    "players/cmd/volume_mute",
+                    player_id=pid,
+                    muted=not self._state.muted,
+                )
+            elif command == "shuffle":
+                await self._client.command(
+                    "player_queues/shuffle",
+                    queue_id=pid,
+                    shuffle_enabled=bool(kwargs["enabled"]),
+                )
+            elif command == "repeat":
+                await self._client.command(
+                    "player_queues/repeat",
+                    queue_id=pid,
+                    repeat_mode=str(kwargs["mode"]).lower(),
+                )
+            elif command == "seek":
+                await self._client.command(
+                    "player_queues/seek",
+                    queue_id=pid,
+                    position=float(kwargs["position"]),
+                )
+            elif command == "volume":
+                await self._client.command(
+                    "players/cmd/volume_set",
+                    player_id=pid,
+                    volume_level=int(kwargs["volume"]),
+                )
+            elif command == "clear_queue":
+                await self._client.command(
+                    "player_queues/clear",
+                    queue_id=pid,
+                )
             elif command == "play_media":
-                if not self.client: return False
-                await self.client.player_queues.play_media(queue_id=pid, media=kwargs["media_id"])
-            else: return False
+                media_id = str(kwargs["media_id"])
+                option = str(kwargs.get("option", "play")).lower()
+                if option not in {"play", "next", "add"}:
+                    option = "play"
+                # Official MA queue options:
+                # play = play now, next = next in queue, add = append.
+                await self._client.command(
+                    "player_queues/play_media",
+                    queue_id=pid,
+                    media=media_id,
+                    option=option,
+                )
+            else:
+                return False
+
             await asyncio.sleep(0.08)
             return True
         except Exception:
