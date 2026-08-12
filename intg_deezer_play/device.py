@@ -8,7 +8,7 @@ from typing import Any
 from ucapi_framework import PollingDevice
 
 from intg_deezer_play.config import DeezerConfig
-from intg_deezer_play.ma_client import DeezerMAClient
+from intg_deezer_play.ma_client import MusicPlayMAClient
 
 _LOG = logging.getLogger(__name__)
 
@@ -46,7 +46,7 @@ class DeezerDevice(PollingDevice):
     def __init__(self, device_config: DeezerConfig, **kwargs):
         super().__init__(device_config, poll_interval=device_config.poll_interval, **kwargs)
         self._config = device_config
-        self._client = DeezerMAClient(device_config.server_url, device_config.access_token)
+        self._client = MusicPlayMAClient(device_config.server_url, device_config.access_token)
         self._state = MusicState()
         self._event_refresh_task: asyncio.Task | None = None
 

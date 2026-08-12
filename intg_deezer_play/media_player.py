@@ -102,7 +102,7 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                     BrowseMediaItem(media_id="library://albums", title="Alben", media_class=MediaClass.DIRECTORY, can_browse=True, thumbnail="icon://uc:album"),
                     BrowseMediaItem(media_id="library://artists", title="Künstler", media_class=MediaClass.DIRECTORY, can_browse=True, thumbnail="icon://uc:artist"),
                 ]
-                root = BrowseMediaItem(media_id="root", title="Deezer", media_class=MediaClass.MUSIC, can_browse=True, can_search=True, items=items)
+                root = BrowseMediaItem(media_id="root", title="Music", media_class=MediaClass.MUSIC, can_browse=True, can_search=True, items=items)
                 return BrowseResults(media=root, pagination=Pagination(page=1, limit=len(items), count=len(items)))
 
             if media_id.startswith("library://"):
@@ -123,7 +123,7 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             result = await client.music.browse(path=media_id)
             rows = getattr(result, "items", result if isinstance(result, list) else []) or []
             items = [self._item(x, "browse") for x in rows]
-            root = BrowseMediaItem(media_id=media_id, title=getattr(result, "name", "Deezer"), media_class=MediaClass.DIRECTORY, can_browse=True, items=items)
+            root = BrowseMediaItem(media_id=media_id, title=getattr(result, "name", "Music"), media_class=MediaClass.DIRECTORY, can_browse=True, items=items)
             return BrowseResults(media=root, pagination=Pagination(page=1, limit=len(items), count=len(items)))
         except Exception:
             _LOG.exception("Browse failed: %s", options)

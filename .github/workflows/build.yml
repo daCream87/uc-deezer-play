@@ -1,4 +1,4 @@
-name: "Build Deezer Play package"
+name: "Build Music Play package"
 
 on:
   workflow_dispatch:
@@ -86,7 +86,14 @@ jobs:
           compile(source, "setup_flow.py", "exec")
           print("Setup flow validated: no in-transaction Music Assistant connection")
           PY
-          jq -e '.driver_id == "deezer_music_play" and .version == "0.1.3"' artifacts/driver.json >/dev/null
+          jq -e '.driver_id == "music_play" and .version == "0.1.4"' artifacts/driver.json >/dev/null
+          python - <<'PY'
+          from pathlib import Path
+          source = Path("intg_deezer_play/driver.py").read_text(encoding="utf-8")
+          assert "DeezerRemote" not in source
+          assert "entity_classes=[DeezerMediaPlayer]" in source
+          print("Single visible media-player entity validated")
+          PY
 
       - name: Create Remote 3 archive
         shell: bash

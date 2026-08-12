@@ -1,15 +1,15 @@
 {
-  "driver_id": "deezer_music_play",
-  "version": "0.1.3",
+  "driver_id": "music_play",
+  "version": "0.1.4",
   "min_core_api": "0.22.0",
   "name": {
-    "en": "Deezer Play",
-    "de": "Deezer Play"
+    "en": "Music Play",
+    "de": "Music Play"
   },
   "icon": "custom:driver-logo.png",
   "description": {
-    "en": "Deezer music control for Remote 3 through a local Music Assistant server.",
-    "de": "Deezer-Musiksteuerung für Remote 3 über einen lokalen Music-Assistant-Server."
+    "en": "Music control for Remote 3 through a local Music Assistant server. Works with music providers configured in Music Assistant.",
+    "de": "Musiksteuerung für Remote 3 über einen lokalen Music-Assistant-Server. Funktioniert mit den in Music Assistant eingerichteten Musikquellen."
   },
   "developer": {
     "name": "Oliver Berndt",
@@ -18,11 +18,11 @@
   },
   "home_page": "https://github.com/daCream87/uc-deezer-play",
   "documentation": "https://github.com/daCream87/uc-deezer-play/blob/main/README.md",
-  "release_date": "2026-08-11",
+  "release_date": "2026-08-12",
   "setup_data_schema": {
     "title": {
-      "en": "Deezer Play Configuration",
-      "de": "Deezer Play einrichten"
+      "en": "Music Play Configuration",
+      "de": "Music Play einrichten"
     },
     "description": {
       "en": "Enter the local Music Assistant address and long-lived access token.",

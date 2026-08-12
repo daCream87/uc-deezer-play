@@ -12,7 +12,7 @@ from intg_deezer_play.config import DeezerConfig
 from intg_deezer_play.driver import DeezerDriver
 from intg_deezer_play.setup_flow import DeezerSetupFlow
 
-__version__ = "0.1.3"
+__version__ = "0.1.4"
 _LOG = logging.getLogger(__name__)
 
 
@@ -24,7 +24,7 @@ def _manifest_path() -> Path:
 
 async def main():
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(levelname)-8s | %(name)-24s | %(message)s")
-    _LOG.info("Starting Deezer Play integration v%s", __version__)
+    _LOG.info("Starting Music Play integration v%s", __version__)
 
     manifest = _manifest_path()
     if not manifest.is_file():
