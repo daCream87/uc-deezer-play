@@ -27,7 +27,7 @@ class DeezerDriver(BaseIntegrationDriver[DeezerDevice, DeezerConfig]):
         the existing connection/session to avoid wake reconnect problems, while
         increasing the polling interval to reduce LAN traffic and background work.
         """
-        _LOG.debug("Enter standby: keeping connection alive, poll interval -> 30s")
+        _LOG.debug("Enter standby: keeping Music Assistant connection alive, poll interval -> 30s")
         for device in self._device_instances.values():
             device._poll_interval = 30
 
