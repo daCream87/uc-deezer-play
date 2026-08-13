@@ -385,170 +385,170 @@ class DeezerDevice(PollingDevice):
         )
         return list(rows or [])
 
-async def send(self, command: str, **kwargs) -> bool:
-    pid = self._state.player_id
-    if not pid:
-        return False
-
-    try:
-        ma = self._client.client
-        queues = getattr(ma, "player_queues", None) if ma else None
-
-        if command == "play_pause":
-            if queues and hasattr(queues, "play_pause"):
-                await queues.play_pause(pid)
-            else:
-                await self._client.command("player_queues/play_pause", queue_id=pid)
-
-        elif command == "stop":
-            # Stop the active Music Assistant queue, not only the physical
-            # renderer. This is the canonical MA STOP operation.
-            if queues and hasattr(queues, "stop"):
-                await queues.stop(pid)
-            else:
-                await self._client.command("player_queues/stop", queue_id=pid)
-            self._state.state = "IDLE"
-            self._state.position = 0
-            self._state.position_updated_at = time.time()
-            self.push_update()
-
-        elif command == "next":
-            if queues and hasattr(queues, "next"):
-                await queues.next(pid)
-            else:
-                await self._client.command("player_queues/next", queue_id=pid)
-
-        elif command == "previous":
-            if queues and hasattr(queues, "previous"):
-                await queues.previous(pid)
-            else:
-                await self._client.command("player_queues/previous", queue_id=pid)
-
-        elif command == "skip":
-            seconds = int(round(float(kwargs.get("seconds", 0))))
-            if not seconds:
-                return True
-            if queues and hasattr(queues, "skip"):
-                await queues.skip(pid, seconds)
-            else:
-                await self._client.command(
-                    "player_queues/skip",
-                    queue_id=pid,
-                    seconds=seconds,
-                )
-            self._state.position = max(
-                0,
-                min(
-                    self._state.duration or 10**9,
-                    self.current_position() + seconds,
-                ),
-            )
-            self._state.position_updated_at = time.time()
-            self.push_update()
-
-        elif command == "seek":
-            target = int(round(float(kwargs.get("position", 0))))
-            if self._state.duration > 0:
-                target = max(0, min(target, self._state.duration))
-            else:
-                target = max(0, target)
-            if queues and hasattr(queues, "seek"):
-                await queues.seek(pid, target)
-            else:
-                await self._client.command(
-                    "player_queues/seek",
-                    queue_id=pid,
-                    position=target,
-                )
-            # Optimistic anchor avoids the slider snapping back while MA
-            # sends the queue-time update.
-            self._state.position = target
-            self._state.position_updated_at = time.time()
-            self.push_update()
-
-        elif command == "volume_up":
-            await self._client.command("players/cmd/volume_up", player_id=pid)
-
-        elif command == "volume_down":
-            await self._client.command("players/cmd/volume_down", player_id=pid)
-
-        elif command == "mute_toggle":
-            await self._client.command(
-                "players/cmd/volume_mute",
-                player_id=pid,
-                muted=not self._state.muted,
-            )
-
-        elif command == "shuffle":
-            enabled = bool(kwargs["enabled"])
-            if queues and hasattr(queues, "shuffle"):
-                await queues.shuffle(pid, enabled)
-            else:
-                await self._client.command(
-                    "player_queues/shuffle",
-                    queue_id=pid,
-                    shuffle_enabled=enabled,
-                )
-            self._state.shuffle = enabled
-            self.push_update()
-
-        elif command == "repeat":
-            mode = str(kwargs["mode"]).lower().split(".")[-1]
-            await self._client.command(
-                "player_queues/repeat",
-                queue_id=pid,
-                repeat_mode=mode,
-            )
-
-        elif command == "volume":
-            await self._client.command(
-                "players/cmd/volume_set",
-                player_id=pid,
-                volume_level=int(kwargs["volume"]),
-            )
-
-        elif command == "clear_queue":
-            if queues and hasattr(queues, "clear"):
-                await queues.clear(pid)
-            else:
-                await self._client.command("player_queues/clear", queue_id=pid)
-
-        elif command == "play_media":
-            media_id = str(kwargs["media_id"]).strip()
-            option_name = str(kwargs.get("option", "play")).lower()
-            if option_name not in {"play", "next", "add"}:
-                option_name = "play"
-
-            if queues and hasattr(queues, "play_media"):
-                try:
-                    from music_assistant_models.enums import QueueOption
-
-                    queue_option = {
-                        "play": QueueOption.PLAY,
-                        "next": QueueOption.NEXT,
-                        "add": QueueOption.ADD,
-                    }[option_name]
-                except Exception:
-                    queue_option = option_name
-
-                await queues.play_media(
-                    pid,
-                    media_id,
-                    option=queue_option,
-                )
-            else:
-                await self._client.command(
-                    "player_queues/play_media",
-                    queue_id=pid,
-                    media=media_id,
-                    option=option_name,
-                )
-        else:
+    async def send(self, command: str, **kwargs) -> bool:
+        pid = self._state.player_id
+        if not pid:
             return False
 
-        # Give MA a short moment to emit its authoritative queue update.
-        await asyncio.sleep(0.12)
-        return True
-    except Exception:
-        _LOG.exception("Music command failed: %s params=%s", command, kwargs)
-        return False
+        try:
+            ma = self._client.client
+            queues = getattr(ma, "player_queues", None) if ma else None
+
+            if command == "play_pause":
+                if queues and hasattr(queues, "play_pause"):
+                    await queues.play_pause(pid)
+                else:
+                    await self._client.command("player_queues/play_pause", queue_id=pid)
+
+            elif command == "stop":
+                # Stop the active Music Assistant queue, not only the physical
+                # renderer. This is the canonical MA STOP operation.
+                if queues and hasattr(queues, "stop"):
+                    await queues.stop(pid)
+                else:
+                    await self._client.command("player_queues/stop", queue_id=pid)
+                self._state.state = "IDLE"
+                self._state.position = 0
+                self._state.position_updated_at = time.time()
+                self.push_update()
+
+            elif command == "next":
+                if queues and hasattr(queues, "next"):
+                    await queues.next(pid)
+                else:
+                    await self._client.command("player_queues/next", queue_id=pid)
+
+            elif command == "previous":
+                if queues and hasattr(queues, "previous"):
+                    await queues.previous(pid)
+                else:
+                    await self._client.command("player_queues/previous", queue_id=pid)
+
+            elif command == "skip":
+                seconds = int(round(float(kwargs.get("seconds", 0))))
+                if not seconds:
+                    return True
+                if queues and hasattr(queues, "skip"):
+                    await queues.skip(pid, seconds)
+                else:
+                    await self._client.command(
+                        "player_queues/skip",
+                        queue_id=pid,
+                        seconds=seconds,
+                    )
+                self._state.position = max(
+                    0,
+                    min(
+                        self._state.duration or 10**9,
+                        self.current_position() + seconds,
+                    ),
+                )
+                self._state.position_updated_at = time.time()
+                self.push_update()
+
+            elif command == "seek":
+                target = int(round(float(kwargs.get("position", 0))))
+                if self._state.duration > 0:
+                    target = max(0, min(target, self._state.duration))
+                else:
+                    target = max(0, target)
+                if queues and hasattr(queues, "seek"):
+                    await queues.seek(pid, target)
+                else:
+                    await self._client.command(
+                        "player_queues/seek",
+                        queue_id=pid,
+                        position=target,
+                    )
+                # Optimistic anchor avoids the slider snapping back while MA
+                # sends the queue-time update.
+                self._state.position = target
+                self._state.position_updated_at = time.time()
+                self.push_update()
+
+            elif command == "volume_up":
+                await self._client.command("players/cmd/volume_up", player_id=pid)
+
+            elif command == "volume_down":
+                await self._client.command("players/cmd/volume_down", player_id=pid)
+
+            elif command == "mute_toggle":
+                await self._client.command(
+                    "players/cmd/volume_mute",
+                    player_id=pid,
+                    muted=not self._state.muted,
+                )
+
+            elif command == "shuffle":
+                enabled = bool(kwargs["enabled"])
+                if queues and hasattr(queues, "shuffle"):
+                    await queues.shuffle(pid, enabled)
+                else:
+                    await self._client.command(
+                        "player_queues/shuffle",
+                        queue_id=pid,
+                        shuffle_enabled=enabled,
+                    )
+                self._state.shuffle = enabled
+                self.push_update()
+
+            elif command == "repeat":
+                mode = str(kwargs["mode"]).lower().split(".")[-1]
+                await self._client.command(
+                    "player_queues/repeat",
+                    queue_id=pid,
+                    repeat_mode=mode,
+                )
+
+            elif command == "volume":
+                await self._client.command(
+                    "players/cmd/volume_set",
+                    player_id=pid,
+                    volume_level=int(kwargs["volume"]),
+                )
+
+            elif command == "clear_queue":
+                if queues and hasattr(queues, "clear"):
+                    await queues.clear(pid)
+                else:
+                    await self._client.command("player_queues/clear", queue_id=pid)
+
+            elif command == "play_media":
+                media_id = str(kwargs["media_id"]).strip()
+                option_name = str(kwargs.get("option", "play")).lower()
+                if option_name not in {"play", "next", "add"}:
+                    option_name = "play"
+
+                if queues and hasattr(queues, "play_media"):
+                    try:
+                        from music_assistant_models.enums import QueueOption
+
+                        queue_option = {
+                            "play": QueueOption.PLAY,
+                            "next": QueueOption.NEXT,
+                            "add": QueueOption.ADD,
+                        }[option_name]
+                    except Exception:
+                        queue_option = option_name
+
+                    await queues.play_media(
+                        pid,
+                        media_id,
+                        option=queue_option,
+                    )
+                else:
+                    await self._client.command(
+                        "player_queues/play_media",
+                        queue_id=pid,
+                        media=media_id,
+                        option=option_name,
+                    )
+            else:
+                return False
+
+            # Give MA a short moment to emit its authoritative queue update.
+            await asyncio.sleep(0.12)
+            return True
+        except Exception:
+            _LOG.exception("Music command failed: %s params=%s", command, kwargs)
+            return False

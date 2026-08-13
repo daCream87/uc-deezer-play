@@ -1,6 +1,6 @@
 {
   "driver_id": "music_play",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "min_core_api": "0.22.0",
   "name": {
     "en": "Music Play",
@@ -18,7 +18,7 @@
   },
   "home_page": "https://github.com/daCream87/uc-deezer-play",
   "documentation": "https://github.com/daCream87/uc-deezer-play/blob/main/README.md",
-  "release_date": "2026-08-12",
+  "release_date": "2026-08-13",
   "setup_data_schema": {
     "title": {
       "en": "Music Play Configuration",

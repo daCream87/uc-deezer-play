@@ -86,7 +86,7 @@ jobs:
           compile(source, "setup_flow.py", "exec")
           print("Setup flow validated: no in-transaction Music Assistant connection")
           PY
-          jq -e '.driver_id == "music_play" and .version == "0.2.3"' artifacts/driver.json >/dev/null
+          jq -e '.driver_id == "music_play" and .version == "0.2.4"' artifacts/driver.json >/dev/null
           python - <<'PY'
           from pathlib import Path
           source = Path("intg_deezer_play/driver.py").read_text(encoding="utf-8")
