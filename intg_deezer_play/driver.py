@@ -14,3 +14,20 @@ class DeezerDriver(BaseIntegrationDriver[DeezerDevice, DeezerConfig]):
             entity_classes=[DeezerMediaPlayer],
             driver_id="music_play",
         )
+
+    async def on_r2_enter_standby(self) -> None:
+        """Keep the device connection alive but reduce background polling.
+
+        The framework normally disconnects devices on display standby. We keep
+        the existing connection/session to avoid wake reconnect problems, while
+        increasing the polling interval to reduce LAN traffic and background work.
+        """
+        _LOG.debug("Enter standby: keeping Music Assistant connection alive, poll interval -> 30s")
+        for device in self._device_instances.values():
+            device._poll_interval = 30
+
+    async def on_r2_exit_standby(self) -> None:
+        """Restore the normal polling interval without reconnecting the device."""
+        _LOG.debug("Exit standby: connection kept alive, poll interval -> 10s")
+        for device in self._device_instances.values():
+            device._poll_interval = 10
