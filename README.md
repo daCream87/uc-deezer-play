@@ -127,3 +127,8 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 - Restores `send()` as a method of `DeezerDevice`.
 - Fixes the playlist playback 500 error `AttributeError: DeezerDevice has no attribute send`.
 - Keeps canonical Music Assistant track URIs and the unique Music Play icon resource.
+
+## v0.2.6
+
+- Keep the existing device connection alive during Remote 3 display standby.
+- Reduce background polling during standby to 30 seconds; restore 10 seconds on wake without reconnecting.

@@ -21,24 +21,18 @@ class DeezerDriver(BaseIntegrationDriver[DeezerDevice, DeezerConfig]):
         )
 
     async def on_r2_enter_standby(self) -> None:
-        """Keep the Music Assistant connection alive while Remote 3 sleeps.
+        """Keep the device connection alive but reduce background polling.
 
-        ucapi-framework disconnects all device instances on ENTER_STANDBY by
-        default. For Music Play this tears down the Music Assistant websocket,
-        event subscription and local position ticker on every display sleep.
-        The integration process itself remains alive, so deliberately keep the
-        existing connection and polling tasks running.
+        The framework normally disconnects devices on display standby. We keep
+        the existing connection/session to avoid wake reconnect problems, while
+        increasing the polling interval to reduce LAN traffic and background work.
         """
-        _LOG.debug("Enter standby event: keeping Music Assistant connection alive")
-        # Intentionally do NOT call super().on_r2_enter_standby().
+        _LOG.debug("Enter standby: keeping connection alive, poll interval -> 30s")
+        for device in self._device_instances.values():
+            device._poll_interval = 30
 
     async def on_r2_exit_standby(self) -> None:
-        """Do not reconnect a Music Assistant client that stayed alive.
-
-        Avoiding the framework's default reconnect prevents a second websocket
-        lifecycle from racing with the still-active listener after display wake.
-        Normal PollingDevice recovery remains responsible for genuine network or
-        server outages.
-        """
-        _LOG.debug("Exit standby event: Music Assistant connection was kept alive")
-        # Intentionally do NOT call super().on_r2_exit_standby().
+        """Restore the normal polling interval without reconnecting the device."""
+        _LOG.debug("Exit standby: connection kept alive, poll interval -> 10s")
+        for device in self._device_instances.values():
+            device._poll_interval = 10
