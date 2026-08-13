@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -37,6 +38,10 @@ class DeezerMediaPlayer(MediaPlayerEntity):
 
     def __init__(self, device_config: DeezerConfig, device: DeezerDevice):
         self._device = device
+        # Search is triggered by the UC UI while typing. Debounce it so rapid
+        # keystrokes collapse into a single Music Assistant request.
+        self._search_generation = 0
+        self._search_debounce_seconds = 0.8
         # Browse items use Music Assistant's canonical URI whenever possible.
         # This survives reconnects/restarts and stays UC-safe.
         self._last_playlist_ref: dict[str, Any] | None = None
@@ -541,9 +546,29 @@ class DeezerMediaPlayer(MediaPlayerEntity):
         if not client:
             return StatusCodes.SERVICE_UNAVAILABLE
 
+        query = str(options.query or "").strip()
+        if not query:
+            return SearchResults(
+                media=[],
+                pagination=Pagination(page=1, limit=0, count=0),
+            )
+
+        # UC invokes SEARCH_MEDIA as the query changes. Do not hit Music
+        # Assistant for every intermediate character: wait until typing has
+        # been idle for 800 ms. A newer invocation invalidates this one.
+        self._search_generation += 1
+        generation = self._search_generation
+        await asyncio.sleep(self._search_debounce_seconds)
+        if generation != self._search_generation:
+            return SearchResults(
+                media=[],
+                pagination=Pagination(page=1, limit=0, count=0),
+            )
+
         try:
+            _LOG.info("SEARCH_MEDIA query=%r", query)
             result = await client.music.search(
-                search_query=options.query,
+                search_query=query,
                 limit=50,
             )
 
@@ -575,7 +600,7 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                 ),
             )
         except Exception:
-            _LOG.exception("Search failed: %s", options.query)
+            _LOG.exception("Search failed: %s", query)
             return StatusCodes.SERVER_ERROR
 
     def _item(self, obj: Any, kind: str) -> BrowseMediaItem:
