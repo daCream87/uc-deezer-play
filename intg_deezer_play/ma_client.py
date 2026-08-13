@@ -20,8 +20,24 @@ class MusicPlayMAClient:
         self.client: MusicAssistantClient | None = None
         self._listen_task: asyncio.Task | None = None
         self._unsubscribe = None
+        self._start_lock = asyncio.Lock()
+
+    @property
+    def is_connected(self) -> bool:
+        task = self._listen_task
+        client = self.client
+        return bool(client is not None and task is not None and not task.done() and getattr(client, "server_info", None) is not None)
 
     async def start(self, event_callback: Callable[[Any], None] | None = None) -> None:
+        # UC can issue CONNECT more than once during boot / WebSocket replacement.
+        # Serialize starts and never tear down an already healthy MA session.
+        async with self._start_lock:
+            if self.is_connected:
+                _LOG.debug("Music Assistant connection already healthy; reusing existing session")
+                return
+            await self._start_locked(event_callback)
+
+    async def _start_locked(self, event_callback: Callable[[Any], None] | None = None) -> None:
         await self.close()
 
         try:

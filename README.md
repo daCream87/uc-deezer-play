@@ -3,7 +3,7 @@
 Version 0.2.5 source build based on the proven packaging/runtime architecture of the Philips Titan OS Remote 3 integration, with all Philips-specific communication removed.
 
 
-## v0.2.5 setup fix
+## v0.2.6 setup fix
 
 - Removes the Music Assistant websocket/API validation from inside the UC setup transaction.
 - The setup form now stores URL/token first; the normal device lifecycle performs the authenticated MA connection afterwards.
@@ -16,7 +16,7 @@ Remote 3 -> Music Play integration -> local Music Assistant -> Deezer music prov
 
 Home Assistant is not required.
 
-## v0.2.5 scope
+## v0.2.6 scope
 
 - Native UC media-player entity with dynamic Now Playing metadata and album artwork URL
 - Play/Pause, Stop, Previous, Next
@@ -60,18 +60,18 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 - The source ZIP is intended for GitHub Actions AArch64 packaging. The workflow creates the Remote-3 `.tar.gz` artifact in the same proven root layout as the Titan project.
 
 
-## v0.2.5 connection/setup fix
+## v0.2.6 connection/setup fix
 - Fresh Remote 3 driver ID `deezer_music_play` to avoid stale icon/config association.
 - Music Assistant listener now waits for authenticated initial state before polling players.
 - Existing Titan-derived package layout remains unchanged.
 
 
-## v0.2.5 setup/device fix
+## v0.2.6 setup/device fix
 - Implements the mandatory `PollingDevice.log_id` property in `DeezerDevice`.
 - Fixes `Can't instantiate abstract class DeezerDevice with abstract method log_id`.
 - No changes to Music Assistant URL/token handling, HEOS player logic, or package layout.
 
-## v0.2.5
+## v0.2.6
 - Visible integration name changed to **Music Play**.
 - New driver ID `music_play`.
 - Removed the second visible helper RemoteEntity (`... Tasten`); only the native media-player is exposed.
@@ -79,7 +79,7 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 - Added startup compatibility for Music Assistant client releases with and without `init_ready`.
 - Music Play is provider-agnostic: Deezer, Tidal, Spotify and other sources configured in Music Assistant can be browsed/played through the same integration where supported by Music Assistant.
 
-## v0.2.5 multimedia / browse update
+## v0.2.6 multimedia / browse update
 - Native Remote 3 media browser with playlists, library tracks, albums, artists and current queue.
 - Native search for tracks, playlists, albums and artists.
 - Play actions: Play now, Play next, Add to queue.
@@ -89,14 +89,14 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 - Keeps a single visible MediaPlayer entity; no second helper "Tasten" device.
 - Playback controls remain native media-player features: Play/Pause, Stop, Previous, Next, volume, mute, seek, shuffle and repeat.
 
-## v0.2.5 fixes
+## v0.2.6 fixes
 - Fixes playlist/album/track browsing failures caused by UC's 255-character `media_id` limit by using compact local reference tokens.
 - Uses Music Assistant's `elapsed_time_last_updated` as the UC playback-position anchor so the Remote can extrapolate elapsed playback time correctly.
 - Uses Music Assistant's canonical artwork resolver for Now Playing where available.
 - Uses schema-31 `MediaItemImage.proxy_id` for browser artwork (`/imageproxy/<proxy_id>`).
 - Adds the Music Play custom icon explicitly to the media-player entity overview.
 
-## v0.2.5 transport / progress / physical buttons
+## v0.2.6 transport / progress / physical buttons
 - STOP now uses Music Assistant's canonical `player_queues/stop` and resets the local position.
 - Absolute seek uses integer seconds through `PlayerQueues.seek` where available.
 - DPAD left/right skip -10/+10 seconds via Music Assistant's queue `skip` command.
@@ -108,7 +108,7 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 - `SHUFFLE_TOGGLE` is exposed as a simple command for manual mapping to an extra programmable key.
 - Note: Music Assistant / UC expose shuffle as a boolean ON/OFF state; there is no separate official third `SHUFFLE ALL` mode.
 
-## v0.2.5 playlist playback / entity icon fix
+## v0.2.6 playlist playback / entity icon fix
 - Uses unique `music-play-logo.png` for driver and media-player entity to avoid cross-integration icon collisions.
 - Uses canonical Music Assistant URIs as browse/play media IDs whenever available.
 - Removes RAM-only hashed media references which could no longer resolve after reconnect/reload.
@@ -116,13 +116,17 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 - Normalizes UC play actions robustly.
 
 
-## v0.2.5 critical command fix
+## v0.2.6 critical command fix
 - Restores `send()` as a method of `DeezerDevice`.
 - Fixes the playlist playback 500 error `AttributeError: DeezerDevice has no attribute send`.
 - Keeps canonical Music Assistant track URIs and the unique Music Play icon resource.
 
-## v0.2.5 search debounce
+## v0.2.6 search debounce
 - Adds an 800 ms debounce to native Remote 3 media search.
 - Rapid intermediate search requests are discarded before contacting Music Assistant.
 - No minimum query length: short artist/title names remain searchable.
 - Search remains Music Assistant global search, so combinations/partial words work; for an unambiguous track use the documented `Artist - Title` form.
+
+
+### v0.2.6
+Remote-reboot recovery: repeated UC CONNECT events are serialized and reuse a healthy Music Assistant session. Polling and commands reconnect a dropped MA listener automatically.

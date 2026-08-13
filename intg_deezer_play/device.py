@@ -68,6 +68,7 @@ class DeezerDevice(PollingDevice):
         self._state = MusicState()
         self._event_refresh_task: asyncio.Task | None = None
         self._position_task: asyncio.Task | None = None
+        self._connect_lock = asyncio.Lock()
 
     @property
     def identifier(self):
@@ -98,14 +99,25 @@ class DeezerDevice(PollingDevice):
         return self._config.server_url.rstrip("/")
 
     async def establish_connection(self):
-        await self._client.start(self._on_event)
-        await self.poll_device()
-        if not self._position_task or self._position_task.done():
-            self._position_task = asyncio.create_task(
-                self._position_ticker(),
-                name="music-play-position-ticker",
-            )
+        # Multiple UC CONNECT events can arrive during Remote startup. They must
+        # not close/recreate the same Music Assistant session concurrently.
+        async with self._connect_lock:
+            await self._client.start(self._on_event)
+            await self.poll_device()
+            if not self._position_task or self._position_task.done():
+                self._position_task = asyncio.create_task(
+                    self._position_ticker(),
+                    name="music-play-position-ticker",
+                )
         return self._client
+
+    async def _ensure_ma_connected(self) -> None:
+        if self._client.is_connected:
+            return
+        async with self._connect_lock:
+            if not self._client.is_connected:
+                _LOG.info("[%s] Reconnecting to Music Assistant", self.log_id)
+                await self._client.start(self._on_event)
 
     async def disconnect(self):
         if self._event_refresh_task:
@@ -171,6 +183,7 @@ class DeezerDevice(PollingDevice):
         return ""
 
     async def poll_device(self):
+        await self._ensure_ma_connected()
         players = await self._client.players()
         pairs = [
             (
@@ -391,6 +404,7 @@ class DeezerDevice(PollingDevice):
             return False
 
         try:
+            await self._ensure_ma_connected()
             ma = self._client.client
             queues = getattr(ma, "player_queues", None) if ma else None
 
@@ -551,4 +565,11 @@ class DeezerDevice(PollingDevice):
             return True
         except Exception:
             _LOG.exception("Music command failed: %s params=%s", command, kwargs)
+            # Repair the session for the next command. Do not blindly replay the
+            # failed command because play/pause, skip, shuffle etc. may already
+            # have reached Music Assistant before the response was lost.
+            try:
+                await self._ensure_ma_connected()
+            except Exception:
+                _LOG.debug("Music Assistant reconnect after command failure did not succeed yet", exc_info=True)
             return False
