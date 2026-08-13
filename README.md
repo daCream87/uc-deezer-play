@@ -3,6 +3,13 @@
 Version 0.2.4 source build based on the proven packaging/runtime architecture of the Philips Titan OS Remote 3 integration, with all Philips-specific communication removed.
 
 
+## v0.2.5 – Standby keepalive fix
+
+- Keeps the existing Music Assistant websocket and polling connection alive when Remote 3 enters display standby.
+- Overrides the ucapi-framework default standby behavior which otherwise disconnects the device instance.
+- Avoids an unnecessary reconnect/websocket lifecycle on `exit_standby`.
+- Playback, browse, commands, setup, entity/icon handling and saved configuration are unchanged.
+
 ## v0.2.4 setup fix
 
 - Removes the Music Assistant websocket/API validation from inside the UC setup transaction.
