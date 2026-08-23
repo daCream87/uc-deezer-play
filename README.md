@@ -2,6 +2,20 @@
 
 Version 0.2.5 source build based on the proven packaging/runtime architecture of the Philips Titan OS Remote 3 integration, with all Philips-specific communication removed.
 
+> **Unofficial community project:** This is an unofficial community integration for Unfolded Circle Remote 3. It is not published, certified, supported, or endorsed by Unfolded Circle, Music Assistant, Deezer, Home Assistant, or other third-party brands mentioned in this repository.
+
+## Download / Installation
+
+Ready-to-install packages for **Unfolded Circle Remote 3** are available under **GitHub Releases**.
+
+1. Open the latest release: <https://github.com/daCream87/uc-deezer-play/releases/latest>
+2. Download the **Music Play** release asset named:
+   - `uc-intg-music_play-<version>-aarch64.tar.gz`
+3. Open the Unfolded Circle Remote 3 web configurator.
+4. Install/upload the downloaded archive as a custom integration.
+5. Run the **Music Play** setup on the Remote 3.
+
+> Important: Download the `uc-intg-music_play-<version>-aarch64.tar.gz` file from the **Release assets** list. Do **not** use GitHub's automatically generated **Source code (zip)** or **Source code (tar.gz)** archives for Remote 3 installation.
 
 ## v0.2.6 setup fix
 
@@ -56,7 +70,7 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 
 - This project does not implement or invent a Deezer Connect protocol.
 - Flow is intentionally not hard-coded into v0.1.0. It should be added only after the chosen Music Assistant/Deezer provider exposes a stable, verified Flow browse/play entry.
-- Alexa output is intentionally deferred because the current Music Assistant Alexa player provider is experimental; the player abstraction is already designed so it can be exposed later if it appears in Music Assistant.
+- Alexa output is intentionally deferred because the current Music Assistant Alexa player provider is experimental; the player abstraction is already designed so it can be exposed later if it appears as a stable MA player.
 - The source ZIP is intended for GitHub Actions AArch64 packaging. The workflow creates the Remote-3 `.tar.gz` artifact in the same proven root layout as the Titan project.
 
 
@@ -70,6 +84,7 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 - Implements the mandatory `PollingDevice.log_id` property in `DeezerDevice`.
 - Fixes `Can't instantiate abstract class DeezerDevice with abstract method log_id`.
 - No changes to Music Assistant URL/token handling, HEOS player logic, or package layout.
+
 
 ## v0.2.6
 - Visible integration name changed to **Music Play**.
