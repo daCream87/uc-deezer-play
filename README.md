@@ -1,8 +1,9 @@
 # Music Play for Unfolded Circle Remote 3
 
-Version 0.2.5 source build based on the proven packaging/runtime architecture of the Philips Titan OS Remote 3 integration, with all Philips-specific communication removed.
+> **Unofficial community integration.**
+> This project is not published, certified, supported, or endorsed by Unfolded Circle, Music Assistant, Deezer, Home Assistant, or any other third-party brand mentioned in this repository.
 
-> **Unofficial community project:** This is an unofficial community integration for Unfolded Circle Remote 3. It is not published, certified, supported, or endorsed by Unfolded Circle, Music Assistant, Deezer, Home Assistant, or other third-party brands mentioned in this repository.
+Local-network Music Assistant integration for Unfolded Circle Remote 3, packaged with the proven Remote-3 GitHub Actions AArch64 workflow pattern used by the related community projects.
 
 ## Download / Installation
 
@@ -11,11 +12,12 @@ Ready-to-install packages for **Unfolded Circle Remote 3** are available under *
 1. Open the latest release: <https://github.com/daCream87/uc-deezer-play/releases/latest>
 2. Download the **Music Play** release asset named:
    - `uc-intg-music_play-<version>-aarch64.tar.gz`
-3. Open the Unfolded Circle Remote 3 web configurator.
-4. Install/upload the downloaded archive as a custom integration.
-5. Run the **Music Play** setup on the Remote 3.
+3. Do **not** download GitHub's auto-generated **Source code (zip)** or **Source code (tar.gz)** archives.
+4. Open the Unfolded Circle Remote 3 web configurator.
+5. Install/upload the downloaded archive as a custom integration.
+6. Run the **Music Play** setup on the Remote 3.
 
-> Important: Download the `uc-intg-music_play-<version>-aarch64.tar.gz` file from the **Release assets** list. Do **not** use GitHub's automatically generated **Source code (zip)** or **Source code (tar.gz)** archives for Remote 3 installation.
+> **Important:** Use only the `uc-intg-music_play-<version>-aarch64.tar.gz` file from the **Release assets** list. GitHub's automatically generated source archives are not installable on Remote 3.
 
 ## v0.2.6 setup fix
 
