@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.2
+
+### Fixed
+- Fixed the Remote 3 startup crash `AttributeError: POWER`. `POWER` is not a valid media-player feature/command in the bundled UC API used by this integration.
+- Physical **Power** is now mapped safely through the Remote entity as `POWER_TOGGLE`: it stops Music Assistant playback and then powers off / puts the selected player into standby when supported.
+- Physical **Stop** remains independent and stops playback only.
+- Updated GitHub Actions validation so an unsupported media-player `POWER` enum cannot accidentally be reintroduced.
+
 ## v0.3.1
 
 ### Added

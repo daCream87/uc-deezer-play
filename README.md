@@ -3,32 +3,13 @@
 > **Unofficial community project:** Music Play is an unofficial community integration for Unfolded Circle Remote 3. It is not developed, endorsed, certified, or supported by Unfolded Circle, Music Assistant, Deezer, Home Assistant, or any other music-service provider mentioned in this project.
 
 
-## 📦 Releases & Installation
-
-### ⬇️ Download the latest release
-
-**[Download the latest Music Play release](https://github.com/daCream87/uc-deezer-play/releases/latest)**
-
-
-**Public releases are created automatically.**  
-Whenever a new version is committed to `main`, GitHub Actions reads the version from `driver.json`. If the matching tag (for example `v0.3.1`) does not exist yet, the workflow automatically:
-
-1. builds and validates the Remote 3 AArch64 integration,
-2. creates the matching Git tag,
-3. creates the GitHub Release,
-4. attaches the installable Remote 3 archive.
-
-For installation, always download the release asset named like:
-
-`uc-intg-music_play-<version>-aarch64.tar.gz`
-
-**Do not use GitHub's automatically generated “Source code (.zip)” or “Source code (.tar.gz)” archives for installation.**
-
-If the same version already has a release tag, later commits with that unchanged version are still built and validated, but **do not create another public release**. Increase the version in `driver.json` for the next public release.
-
 ## Download / Installation
 
 Ready-to-install packages for Unfolded Circle Remote 3 are available under **GitHub Releases**.
+
+### ⬇️ Latest release
+
+**[Open the latest Music Play release](https://github.com/daCream87/uc-deezer-play/releases/latest)**
 
 1. Open the latest GitHub Release.
 2. Download the Music Play release asset named `uc-intg-music_play-<version>-aarch64.tar.gz`.
@@ -38,9 +19,13 @@ Ready-to-install packages for Unfolded Circle Remote 3 are available under **Git
 
 **Important:** download the `uc-intg-music_play-<version>-aarch64.tar.gz` file from the release assets. Do **not** use GitHub's automatically generated **Source code (zip)** or **Source code (tar.gz)** archives for installation on Remote 3.
 
+**Release process:** public releases are created automatically when a new version is committed to `main`. If the matching `v<version>` tag already exists, the commit is still built and validated, but no duplicate public release is created.
 
-Version 0.3.1 source build based on the proven packaging/runtime architecture of the Philips Titan OS Remote 3 integration, with all Philips-specific communication removed.
+### Physical Power / Stop buttons
 
+- **STOP** stops the active Music Assistant playback queue.
+- **POWER** stops playback first and then powers off / puts the selected playback device into standby when the Music Assistant player supports power control.
+- Power is implemented through the Remote entity button mapping, not through an unsupported media-player `POWER` feature.
 
 ## v0.2.5 – Standby keepalive fix
 

@@ -99,12 +99,15 @@ jobs:
           device = Path("intg_deezer_play/device.py").read_text(encoding="utf-8")
           setup = Path("intg_deezer_play/setup_flow.py").read_text(encoding="utf-8")
           ma = Path("intg_deezer_play/ma_client.py").read_text(encoding="utf-8")
-          assert "Features.POWER" in media
-          assert "Commands.POWER" in media
+          assert "Features.POWER" not in media
+          assert "Commands.POWER" not in media
+          remote = Path("intg_deezer_play/remote.py").read_text(encoding="utf-8")
+          assert '"POWER_TOGGLE"' in remote
+          assert '"stop_and_power_off"' in remote
           assert "stop_and_power_off" in device
           assert "create_long_lived_token" in setup
           assert "login_with_token" in ma
-          print("Power/login feature set validated")
+          print("Remote power/stop and login feature set validated")
           PY
 
           python - <<'PY'

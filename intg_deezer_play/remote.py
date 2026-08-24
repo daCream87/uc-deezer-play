@@ -13,7 +13,7 @@ from intg_deezer_play.device import DeezerDevice
 
 _LOG = logging.getLogger(__name__)
 
-COMMANDS = ["PLAY_PAUSE", "STOP", "PREVIOUS", "NEXT", "VOLUME_UP", "VOLUME_DOWN", "MUTE"]
+COMMANDS = ["POWER_TOGGLE", "PLAY_PAUSE", "STOP", "PREVIOUS", "NEXT", "VOLUME_UP", "VOLUME_DOWN", "MUTE"]
 
 
 class DeezerRemote(RemoteEntity):
@@ -38,12 +38,30 @@ class DeezerRemote(RemoteEntity):
     def _send(command): return {"cmd_id": "send_cmd", "params": {"command": command}}
 
     def _button_mapping(self):
-        pairs = [("PLAY", "PLAY_PAUSE"), ("STOP", "STOP"), ("PREV", "PREVIOUS"), ("NEXT", "NEXT"), ("VOLUME_UP", "VOLUME_UP"), ("VOLUME_DOWN", "VOLUME_DOWN"), ("MUTE", "MUTE")]
+        pairs = [
+            (("POWER", "POWER_TOGGLE"), "POWER_TOGGLE"),
+            (("PLAY",), "PLAY_PAUSE"),
+            (("STOP",), "STOP"),
+            (("PREV", "PREVIOUS"), "PREVIOUS"),
+            (("NEXT",), "NEXT"),
+            (("VOLUME_UP",), "VOLUME_UP"),
+            (("VOLUME_DOWN",), "VOLUME_DOWN"),
+            (("MUTE",), "MUTE"),
+        ]
         result = []
-        for button_name, command in pairs:
-            button = getattr(Buttons, button_name, None)
+        for button_names, command in pairs:
+            button = next(
+                (getattr(Buttons, name, None) for name in button_names if getattr(Buttons, name, None) is not None),
+                None,
+            )
             if button is not None:
-                result.append({"button": button.value, "short_press": self._send(command), "long_press": None})
+                result.append(
+                    {
+                        "button": button.value,
+                        "short_press": self._send(command),
+                        "long_press": None,
+                    }
+                )
         return result
 
     @staticmethod
@@ -68,7 +86,16 @@ class DeezerRemote(RemoteEntity):
     async def _handle_command(self, entity: Remote, cmd_id: str, params: dict[str, Any] | None = None):
         if cmd_id == "send_cmd" and params:
             cmd_id = str(params.get("command", ""))
-        mapping = {"PLAY_PAUSE": "play_pause", "STOP": "stop", "PREVIOUS": "previous", "NEXT": "next", "VOLUME_UP": "volume_up", "VOLUME_DOWN": "volume_down", "MUTE": "mute_toggle"}
+        mapping = {
+            "POWER_TOGGLE": "stop_and_power_off",
+            "PLAY_PAUSE": "play_pause",
+            "STOP": "stop",
+            "PREVIOUS": "previous",
+            "NEXT": "next",
+            "VOLUME_UP": "volume_up",
+            "VOLUME_DOWN": "volume_down",
+            "MUTE": "mute_toggle",
+        }
         command = mapping.get(cmd_id)
         if not command: return StatusCodes.NOT_IMPLEMENTED
         try:

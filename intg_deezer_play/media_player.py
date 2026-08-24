@@ -47,7 +47,6 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             f"media_player.{device_config.identifier}",
             device_config.name,
             features=[
-                Features.POWER,
                 Features.PLAY_PAUSE,
                 Features.STOP,
                 Features.PREVIOUS,
@@ -161,9 +160,7 @@ class DeezerMediaPlayer(MediaPlayerEntity):
     ) -> StatusCodes:
         p = params or {}
         try:
-            if cmd_id == Commands.POWER:
-                ok = await self._device.send("stop_and_power_off")
-            elif cmd_id == Commands.PLAY_PAUSE:
+            if cmd_id == Commands.PLAY_PAUSE:
                 ok = await self._device.send("play_pause")
             elif cmd_id == Commands.STOP:
                 ok = await self._device.send("stop")
