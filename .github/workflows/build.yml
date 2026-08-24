@@ -35,6 +35,7 @@ jobs:
         shell: bash
         run: |
           TAG="${{ inputs.release_tag || github.ref_name }}"
+          TAG="${TAG#Music Play }"
           EXPECTED="v${VERSION}"
           if [ "$TAG" != "$EXPECTED" ]; then
             echo "Release tag $TAG does not match driver.json version $VERSION"
@@ -175,6 +176,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ inputs.release_tag || github.ref_name }}"
+          TAG="${TAG#Music Play }"
           RELEASE_TITLE="Music Play ${TAG}"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $TAG already exists, updating asset"
