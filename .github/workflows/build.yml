@@ -29,8 +29,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
-          TAG="${{ inputs.release_tag || github.ref_name }}"
-          TAG="${TAG#Music Play }"
+          TAG="${GITHUB_REF#refs/tags/}"
           EXPECTED="v${VERSION}"
           if [ "$TAG" != "$EXPECTED" ]; then
             echo "Release tag $TAG does not match driver.json version $VERSION"
@@ -125,10 +124,15 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           source = Path("intg_deezer_play/setup_flow.py").read_text(encoding="utf-8")
-          assert "MusicAssistantClient" not in source, "Setup flow must not open MA sessions"
-          assert "http://192.168.178.46:8095" in source
+          config = Path("intg_deezer_play/config.py").read_text(encoding="utf-8")
+          assert "create_long_lived_token" in source
+          assert '"username"' in source
+          assert '"password"' in source
+          assert '"access_token"' in source
+          assert "username:" not in config
+          assert "password:" not in config
           compile(source, "setup_flow.py", "exec")
-          print("Setup flow validated: no in-transaction Music Assistant connection")
+          print("Setup flow validated: token or username/password; credentials are not persisted")
           PY
           jq -e --arg v "$VERSION" '.driver_id == "music_play" and .version == $v' artifacts/driver.json >/dev/null
           python - <<'PY'
@@ -169,8 +173,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="${{ inputs.release_tag || github.ref_name }}"
-          TAG="${TAG#Music Play }"
+          TAG="${GITHUB_REF#refs/tags/}"
           RELEASE_TITLE="Music Play ${TAG}"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $TAG already exists, updating asset"

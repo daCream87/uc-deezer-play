@@ -15,7 +15,7 @@ Ready-to-install packages for Unfolded Circle Remote 3 are available under **Git
 **Important:** download the `uc-intg-music_play-<version>-aarch64.tar.gz` file from the release assets. Do **not** use GitHub's automatically generated **Source code (zip)** or **Source code (tar.gz)** archives for installation on Remote 3.
 
 
-Version 0.2.4 source build based on the proven packaging/runtime architecture of the Philips Titan OS Remote 3 integration, with all Philips-specific communication removed.
+Version 0.3.1 source build based on the proven packaging/runtime architecture of the Philips Titan OS Remote 3 integration, with all Philips-specific communication removed.
 
 
 ## v0.2.5 – Standby keepalive fix
@@ -58,7 +58,7 @@ Home Assistant is not required.
 1. A Music Assistant Server reachable from Remote 3 on the LAN.
 2. Deezer configured as a Music Provider in Music Assistant.
 3. Denon AVC-X4800H available as a HEOS player in Music Assistant.
-4. A Music Assistant Long-Lived Access Token created in the Music Assistant profile.
+4. Either a Music Assistant Long-Lived Access Token, or a Music Assistant username/password so Music Play can create a dedicated token during setup.
 
 Default Music Assistant port: 8095.
 
@@ -67,7 +67,7 @@ Default Music Assistant port: 8095.
 Enter:
 - Name: `Music Play`
 - Music Assistant URL, e.g. `http://192.168.178.20:8095`
-- Long-Lived Access Token
+- Long-Lived Access Token **or** Music Assistant username/password
 - Preferred player: `Denon AVC-X4800H` (the integration also tries Denon/HEOS/X4800H automatically)
 
 ## Cover art
