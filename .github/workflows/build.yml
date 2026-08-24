@@ -6,6 +6,9 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 env:
   PYTHON_VER: 3.11.12-0.3.0
 
@@ -21,6 +24,18 @@ jobs:
         run: |
           echo "VERSION=$(jq -r '.version' driver.json)" >> "$GITHUB_ENV"
           echo "DRIVER_ID=$(jq -r '.driver_id' driver.json)" >> "$GITHUB_ENV"
+
+      - name: Validate version tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          EXPECTED="v${VERSION}"
+          if [ "$TAG" != "$EXPECTED" ]; then
+            echo "Release tag $TAG does not match driver.json version $VERSION"
+            exit 1
+          fi
+          echo "Tag $TAG matches driver.json version $VERSION"
 
       - name: Build AArch64 driver
         shell: bash
@@ -38,6 +53,7 @@ jobs:
                 --collect-all ucapi_framework \
                 --collect-all music_assistant_client \
                 --collect-all music_assistant_models \
+                --collect-all zeroconf \
                 intg_deezer_play/__main__.py"
 
       - name: Prepare package
@@ -74,6 +90,33 @@ jobs:
           python -m compileall -q intg_deezer_play
           python - <<'PY'
           from pathlib import Path
+          media = Path("intg_deezer_play/media_player.py").read_text(encoding="utf-8")
+          device = Path("intg_deezer_play/device.py").read_text(encoding="utf-8")
+          setup = Path("intg_deezer_play/setup_flow.py").read_text(encoding="utf-8")
+          ma = Path("intg_deezer_play/ma_client.py").read_text(encoding="utf-8")
+          assert "Features.POWER" in media
+          assert "Commands.POWER" in media
+          assert "stop_and_power_off" in device
+          assert "create_long_lived_token" in setup
+          assert "login_with_token" in ma
+          print("Power/login feature set validated")
+          PY
+
+          python - <<'PY'
+          from pathlib import Path
+          media = Path("intg_deezer_play/media_player.py").read_text(encoding="utf-8")
+          init = Path("intg_deezer_play/__init__.py").read_text(encoding="utf-8")
+          device = Path("intg_deezer_play/device.py").read_text(encoding="utf-8")
+          assert "musicplay://radio" in media
+          assert "_browse_artist" in media
+          assert "_search_debounce_seconds = 0.8" in media
+          assert "ADD_TO_FAVORITES" in media
+          assert "MusicAssistantDiscovery" in init
+          assert 'elif command == "favorite":' in device
+          print("Music Play v0.3 feature set validated")
+          PY
+          python - <<'PY'
+          from pathlib import Path
           src = Path("intg_deezer_play/__init__.py").read_text(encoding="utf-8")
           assert 'Path(sys.executable).resolve().parent / "driver.json"' in src
           print("Runtime manifest lookup validated")
@@ -86,13 +129,22 @@ jobs:
           compile(source, "setup_flow.py", "exec")
           print("Setup flow validated: no in-transaction Music Assistant connection")
           PY
-          jq -e '.driver_id == "music_play" and .version == "0.2.6"' artifacts/driver.json >/dev/null
+          jq -e --arg v "$VERSION" '.driver_id == "music_play" and .version == $v' artifacts/driver.json >/dev/null
           python - <<'PY'
           from pathlib import Path
           source = Path("intg_deezer_play/driver.py").read_text(encoding="utf-8")
           assert "DeezerRemote" not in source
           assert "entity_classes=[DeezerMediaPlayer]" in source
           print("Single visible media-player entity validated")
+          PY
+
+          python - <<'PY'
+          from pathlib import Path
+          source = Path("intg_deezer_play/driver.py").read_text(encoding="utf-8")
+          assert "async def on_r2_enter_standby" in source
+          assert "async def on_r2_exit_standby" in source
+          assert "keeping Music Assistant connection alive" in source
+          print("Standby keepalive handlers validated")
           PY
 
       - name: Create Remote 3 archive
@@ -110,3 +162,25 @@ jobs:
           path: ${{ env.ARTIFACT_NAME }}.tar.gz
           if-no-files-found: error
           retention-days: 7
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          RELEASE_TITLE="Music Play ${TAG}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists, updating asset"
+            gh release upload "$TAG" \
+              "${ARTIFACT_NAME}.tar.gz" \
+              --clobber \
+              --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" \
+              "${ARTIFACT_NAME}.tar.gz" \
+              --title "$RELEASE_TITLE" \
+              --generate-notes \
+              --repo "$GITHUB_REPOSITORY"
+          fi
+

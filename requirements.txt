@@ -1,3 +1,4 @@
 ucapi>=0.7.0,<0.8
 ucapi-framework>=1.9.5,<2
 music-assistant-client>=1.0,<2
+zeroconf>=0.131,<1

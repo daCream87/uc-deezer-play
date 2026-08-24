@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from datetime import datetime, timezone
@@ -38,8 +37,6 @@ class DeezerMediaPlayer(MediaPlayerEntity):
 
     def __init__(self, device_config: DeezerConfig, device: DeezerDevice):
         self._device = device
-        # Search is triggered by the UC UI while typing. Debounce it so rapid
-        # keystrokes collapse into a single Music Assistant request.
         self._search_generation = 0
         self._search_debounce_seconds = 0.8
         # Browse items use Music Assistant's canonical URI whenever possible.
@@ -50,6 +47,7 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             f"media_player.{device_config.identifier}",
             device_config.name,
             features=[
+                Features.POWER,
                 Features.PLAY_PAUSE,
                 Features.STOP,
                 Features.PREVIOUS,
@@ -97,6 +95,7 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                 "simple_commands": [
                     "SHUFFLE_TOGGLE",
                     "LAST_PLAYLIST",
+                    "ADD_TO_FAVORITES",
                 ],
             },
             icon="custom:music-play-logo.png",
@@ -162,7 +161,9 @@ class DeezerMediaPlayer(MediaPlayerEntity):
     ) -> StatusCodes:
         p = params or {}
         try:
-            if cmd_id == Commands.PLAY_PAUSE:
+            if cmd_id == Commands.POWER:
+                ok = await self._device.send("stop_and_power_off")
+            elif cmd_id == Commands.PLAY_PAUSE:
                 ok = await self._device.send("play_pause")
             elif cmd_id == Commands.STOP:
                 ok = await self._device.send("stop")
@@ -191,6 +192,8 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                     "shuffle",
                     enabled=not self._device.state.shuffle,
                 )
+            elif cmd_id in ("ADD_TO_FAVORITES", "Add to Favorites"):
+                ok = await self._device.send("favorite")
             elif cmd_id == Commands.VOLUME_UP:
                 ok = await self._device.send("volume_up")
             elif cmd_id == Commands.VOLUME_DOWN:
@@ -272,6 +275,23 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             _LOG.exception("UC media command failed: %s", cmd_id)
             return StatusCodes.SERVER_ERROR
 
+
+    @staticmethod
+    def _paging(options: BrowseOptions, default_limit: int = 20) -> tuple[int, int, int]:
+        paging = getattr(options, "paging", None)
+        page = max(1, int(getattr(paging, "page", 1) or 1))
+        limit = int(getattr(paging, "limit", default_limit) or default_limit)
+        limit = max(1, min(limit, 50))
+        offset = (page - 1) * limit
+        return page, limit, offset
+
+    @staticmethod
+    def _pagination(page: int, limit: int, returned: int, offset: int) -> Pagination:
+        # Music Assistant library calls do not consistently expose a total.
+        # A full page means "there may be another page"; a short page is final.
+        count = offset + returned + (1 if returned == limit else 0)
+        return Pagination(page=page, limit=limit, count=count)
+
     async def browse(
         self,
         options: BrowseOptions,
@@ -286,7 +306,8 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             if media_id == "root":
                 if self._open_last_playlist_once and self._last_playlist_ref:
                     self._open_last_playlist_once = False
-                    return await self._browse_playlist(self._last_playlist_ref)
+                    return await self._browse_playlist(self._last_playlist_ref, options)
+
                 items = [
                     BrowseMediaItem(
                         media_id="musicplay://queue",
@@ -329,6 +350,14 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                         can_search=True,
                         thumbnail="icon://uc:artist",
                     ),
+                    BrowseMediaItem(
+                        media_id="musicplay://radio",
+                        title="Radio",
+                        media_class=MediaClass.RADIO,
+                        can_browse=True,
+                        can_search=True,
+                        thumbnail="icon://uc:radio",
+                    ),
                 ]
                 root = BrowseMediaItem(
                     media_id="root",
@@ -350,26 +379,29 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                 )
 
             if media_id == "musicplay://queue":
-                return await self._browse_queue()
+                return await self._browse_queue(options)
 
             if media_id in {
                 "musicplay://playlists",
                 "musicplay://tracks",
                 "musicplay://albums",
                 "musicplay://artists",
+                "musicplay://radio",
             }:
-                return await self._browse_library(media_id)
+                return await self._browse_library(media_id, options)
 
             ref = self._decode_ref(media_id)
             media_type = str(ref.get("media_type", "")).lower()
 
             if media_type == "playlist":
-                return await self._browse_playlist(ref)
-
+                return await self._browse_playlist(ref, options)
             if media_type == "album":
-                return await self._browse_album(ref)
+                return await self._browse_album(ref, options)
+            if media_type == "artist":
+                return await self._browse_artist(ref, options)
 
-            # Provider-aware fallback for folders returned by Music Assistant.
+            # Provider-specific folders: delegate browsing to Music Assistant.
+            page, limit, offset = self._paging(options)
             path = str(ref.get("path") or ref.get("uri") or media_id)
             result = await client.music.browse(path=path)
             rows = getattr(
@@ -377,7 +409,9 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                 "items",
                 result if isinstance(result, list) else [],
             ) or []
-            items = [self._item(x, "browse") for x in rows]
+            rows = list(rows)
+            page_rows = rows[offset: offset + limit]
+            items = [self._item(x, "browse") for x in page_rows]
             root = BrowseMediaItem(
                 media_id=media_id,
                 title=getattr(result, "name", "Music"),
@@ -388,33 +422,40 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             )
             return BrowseResults(
                 media=root,
-                pagination=Pagination(
-                    page=1,
-                    limit=len(items),
-                    count=len(items),
-                ),
+                pagination=self._pagination(page, limit, len(items), offset),
             )
         except Exception:
             _LOG.exception("Browse failed: %s", options)
             return StatusCodes.SERVER_ERROR
 
-    async def _browse_library(self, media_id: str) -> BrowseResults:
+    async def _browse_library(
+        self,
+        media_id: str,
+        options: BrowseOptions,
+    ) -> BrowseResults:
         client = self._device.client
         kind = media_id.rsplit("/", 1)[-1]
-        method = {
+        page, limit, offset = self._paging(options)
+
+        methods = {
             "playlists": client.music.get_library_playlists,
             "tracks": client.music.get_library_tracks,
             "albums": client.music.get_library_albums,
             "artists": client.music.get_library_artists,
-        }[kind]
+            "radio": getattr(client.music, "get_library_radios", None),
+        }
+        method = methods[kind]
+        if method is None:
+            raise RuntimeError("Installed Music Assistant client does not support radio browsing")
 
-        rows = await method(limit=100, offset=0)
+        rows = list(await method(limit=limit, offset=offset) or [])
         items = [self._item(x, kind) for x in rows]
         titles = {
             "playlists": "Wiedergabelisten",
             "tracks": "Titel / Favoriten",
             "albums": "Alben",
             "artists": "Künstler",
+            "radio": "Radio",
         }
 
         root = BrowseMediaItem(
@@ -427,24 +468,33 @@ class DeezerMediaPlayer(MediaPlayerEntity):
         )
         return BrowseResults(
             media=root,
-            pagination=Pagination(
-                page=1,
-                limit=len(items),
-                count=len(items),
-            ),
+            pagination=self._pagination(page, limit, len(items), offset),
         )
 
-    async def _browse_playlist(self, ref: dict[str, Any]) -> BrowseResults:
+    async def _browse_playlist(
+        self,
+        ref: dict[str, Any],
+        options: BrowseOptions,
+    ) -> BrowseResults:
         self._last_playlist_ref = dict(ref)
         item_id = str(ref.get("item_id", ""))
         provider = str(ref.get("provider", "library"))
+        page, limit, offset = self._paging(options)
+
+        # Playlist-tracks API uses its own zero-based page. Fetch the provider
+        # page, then apply the Remote limit defensively.
+        provider_page = max(0, page - 1)
         rows = await self._device._client.command(
             "music/playlists/playlist_tracks",
             item_id=item_id,
             provider_instance_id_or_domain=provider,
-            page=0,
+            page=provider_page,
         )
-        items = [self._item(x, "track") for x in (rows or [])]
+        rows = list(rows or [])
+        if len(rows) > limit:
+            rows = rows[:limit]
+
+        items = [self._item(x, "track") for x in rows]
         root = BrowseMediaItem(
             media_id=self._encode_ref(ref),
             title=str(ref.get("name") or "Wiedergabeliste"),
@@ -459,22 +509,35 @@ class DeezerMediaPlayer(MediaPlayerEntity):
         )
         return BrowseResults(
             media=root,
-            pagination=Pagination(
-                page=1,
-                limit=len(items),
-                count=len(items),
-            ),
+            pagination=self._pagination(page, limit, len(items), offset),
         )
 
-    async def _browse_album(self, ref: dict[str, Any]) -> BrowseResults:
+    async def _browse_album(
+        self,
+        ref: dict[str, Any],
+        options: BrowseOptions,
+    ) -> BrowseResults:
         item_id = str(ref.get("item_id", ""))
         provider = str(ref.get("provider", "library"))
-        rows = await self._device._client.command(
-            "music/albums/album_tracks",
-            item_id=item_id,
-            provider_instance_id_or_domain=provider,
-        )
-        items = [self._item(x, "track") for x in (rows or [])]
+        page, limit, offset = self._paging(options)
+
+        client = self._device.client
+        getter = getattr(client.music, "get_album_tracks", None)
+        if callable(getter):
+            rows = await getter(
+                item_id=item_id,
+                provider_instance_id_or_domain=provider,
+            )
+        else:
+            rows = await self._device._client.command(
+                "music/albums/album_tracks",
+                item_id=item_id,
+                provider_instance_id_or_domain=provider,
+            )
+
+        rows = list(rows or [])
+        page_rows = rows[offset: offset + limit]
+        items = [self._item(x, "track") for x in page_rows]
         root = BrowseMediaItem(
             media_id=self._encode_ref(ref),
             title=str(ref.get("name") or "Album"),
@@ -487,37 +550,67 @@ class DeezerMediaPlayer(MediaPlayerEntity):
         )
         return BrowseResults(
             media=root,
-            pagination=Pagination(
-                page=1,
-                limit=len(items),
-                count=len(items),
-            ),
+            pagination=self._pagination(page, limit, len(items), offset),
         )
 
-    async def _browse_queue(self) -> BrowseResults:
-        rows = await self._device.queue_items(limit=100, offset=0)
+    async def _browse_artist(
+        self,
+        ref: dict[str, Any],
+        options: BrowseOptions,
+    ) -> BrowseResults:
+        """Artist -> album drilldown, preserving our one-entity UX."""
+        client = self._device.client
+        item_id = str(ref.get("item_id", ""))
+        provider = str(ref.get("provider", "library"))
+        page, limit, offset = self._paging(options)
+
+        getter = getattr(client.music, "get_artist_albums", None)
+        if not callable(getter):
+            raise RuntimeError("Installed Music Assistant client does not support artist albums")
+
+        rows = list(
+            await getter(
+                item_id=item_id,
+                provider_instance_id_or_domain=provider,
+            )
+            or []
+        )
+        page_rows = rows[offset: offset + limit]
+        items = [self._item(x, "album") for x in page_rows]
+        root = BrowseMediaItem(
+            media_id=self._encode_ref(ref),
+            title=str(ref.get("name") or "Künstler"),
+            media_class=MediaClass.ARTIST,
+            media_type=MediaContentType.ARTIST,
+            can_browse=True,
+            can_play=bool(ref.get("uri")),
+            thumbnail=self._safe_thumbnail(ref.get("thumbnail")),
+            items=items,
+        )
+        return BrowseResults(
+            media=root,
+            pagination=self._pagination(page, limit, len(items), offset),
+        )
+
+    async def _browse_queue(self, options: BrowseOptions) -> BrowseResults:
+        page, limit, offset = self._paging(options)
+        rows = await self._device.queue_items(limit=limit, offset=offset)
+
         current_index = 0
-        queue = None
         try:
-            queue = await self._device._client.queue(
-                self._device.state.player_id
-            )
-            current_index = int(
-                getattr(queue, "current_index", 0)
-                if queue is not None
-                else 0
-            )
+            queue = await self._device._client.queue(self._device.state.player_id)
+            current_index = int(getattr(queue, "current_index", 0) or 0)
         except Exception:
             pass
 
         items = []
-        for idx, row in enumerate(rows):
+        for local_idx, row in enumerate(rows):
+            absolute_idx = offset + local_idx
             media = self._get(row, "media_item", row)
             item = self._item(media, "track")
-            marker = "▶" if idx == current_index else f"{idx + 1:02d}"
+            marker = "▶" if absolute_idx == current_index else f"{absolute_idx + 1:02d}"
             item.title = f"{marker}  {item.title}"
             item.subtitle = item.artist or item.album or None
-            # Queue entries are shown as a transparent ordering view.
             item.can_browse = False
             items.append(item)
 
@@ -531,11 +624,7 @@ class DeezerMediaPlayer(MediaPlayerEntity):
         )
         return BrowseResults(
             media=root,
-            pagination=Pagination(
-                page=1,
-                limit=len(items),
-                count=len(items),
-            ),
+            pagination=self._pagination(page, limit, len(items), offset),
         )
 
     async def search(
@@ -553,9 +642,8 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                 pagination=Pagination(page=1, limit=0, count=0),
             )
 
-        # UC invokes SEARCH_MEDIA as the query changes. Do not hit Music
-        # Assistant for every intermediate character: wait until typing has
-        # been idle for 800 ms. A newer invocation invalidates this one.
+        # Remote 3 sends search requests while typing. Debounce locally so only
+        # the last query in a burst reaches Music Assistant.
         self._search_generation += 1
         generation = self._search_generation
         await asyncio.sleep(self._search_debounce_seconds)
@@ -566,10 +654,12 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             )
 
         try:
-            _LOG.info("SEARCH_MEDIA query=%r", query)
+            paging = getattr(options, "paging", None)
+            limit = max(1, min(int(getattr(paging, "limit", 50) or 50), 50))
+
             result = await client.music.search(
                 search_query=query,
-                limit=50,
+                limit=limit,
             )
 
             wanted = None
@@ -585,6 +675,7 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                 ("playlists", "playlist"),
                 ("albums", "album"),
                 ("artists", "artist"),
+                ("radio", "radio"),
             ):
                 if wanted and media_type not in wanted:
                     continue
@@ -647,14 +738,15 @@ class DeezerMediaPlayer(MediaPlayerEntity):
 
         thumbnail = self._extract_artwork(obj)
 
-        can_browse = media_type in ("playlist", "album")
-        can_play = media_type in ("track", "playlist", "album", "artist")
+        can_browse = media_type in ("playlist", "album", "artist")
+        can_play = media_type in ("track", "playlist", "album", "artist", "radio")
 
         mclass = {
             "track": MediaClass.TRACK,
             "playlist": MediaClass.PLAYLIST,
             "album": MediaClass.ALBUM,
             "artist": MediaClass.ARTIST,
+            "radio": MediaClass.RADIO,
         }.get(media_type, MediaClass.MUSIC)
 
         mtype = {
@@ -662,6 +754,7 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             "playlist": MediaContentType.PLAYLIST,
             "album": MediaContentType.ALBUM,
             "artist": MediaContentType.ARTIST,
+            "radio": MediaContentType.RADIO,
         }.get(media_type, MediaContentType.MUSIC)
 
         ref = {
@@ -742,6 +835,7 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             "playlist": "icon://uc:playlist",
             "album": "icon://uc:album",
             "artist": "icon://uc:artist",
+            "radio": "icon://uc:radio",
         }.get(media_type, "icon://uc:music")
 
     @staticmethod

@@ -99,8 +99,6 @@ class DeezerDevice(PollingDevice):
         return self._config.server_url.rstrip("/")
 
     async def establish_connection(self):
-        # Multiple UC CONNECT events can arrive during Remote startup. They must
-        # not close/recreate the same Music Assistant session concurrently.
         async with self._connect_lock:
             await self._client.start(self._on_event)
             await self.poll_device()
@@ -493,6 +491,63 @@ class DeezerDevice(PollingDevice):
                     muted=not self._state.muted,
                 )
 
+            elif command == "power_off":
+                ma = self._client.client
+                players_api = getattr(ma, "players", None) if ma else None
+                power_fn = getattr(players_api, "power", None)
+                if callable(power_fn):
+                    await power_fn(pid, False)
+                else:
+                    await self._client.command(
+                        "players/cmd/power",
+                        player_id=pid,
+                        powered=False,
+                    )
+                self._state.state = "IDLE"
+                self._state.position = 0
+                self._state.position_updated_at = time.time()
+                self.push_update()
+
+            elif command == "stop_and_power_off":
+                # First stop the MA queue, then power off the selected renderer.
+                if queues and hasattr(queues, "stop"):
+                    await queues.stop(pid)
+                else:
+                    await self._client.command(
+                        "player_queues/stop",
+                        queue_id=pid,
+                    )
+
+                ma = self._client.client
+                players_api = getattr(ma, "players", None) if ma else None
+                power_fn = getattr(players_api, "power", None)
+                if callable(power_fn):
+                    await power_fn(pid, False)
+                else:
+                    await self._client.command(
+                        "players/cmd/power",
+                        player_id=pid,
+                        powered=False,
+                    )
+
+                self._state.state = "IDLE"
+                self._state.position = 0
+                self._state.position_updated_at = time.time()
+                self.push_update()
+
+            elif command == "favorite":
+                ma = self._client.client
+                players_api = getattr(ma, "players", None) if ma else None
+                add_favorite = getattr(
+                    players_api,
+                    "add_currently_playing_to_favorites",
+                    None,
+                )
+                if not callable(add_favorite):
+                    _LOG.warning("Music Assistant client does not expose favorite command")
+                    return False
+                await add_favorite(pid)
+
             elif command == "shuffle":
                 enabled = bool(kwargs["enabled"])
                 if queues and hasattr(queues, "shuffle"):
@@ -565,11 +620,4 @@ class DeezerDevice(PollingDevice):
             return True
         except Exception:
             _LOG.exception("Music command failed: %s params=%s", command, kwargs)
-            # Repair the session for the next command. Do not blindly replay the
-            # failed command because play/pause, skip, shuffle etc. may already
-            # have reached Music Assistant before the response was lost.
-            try:
-                await self._ensure_ma_connected()
-            except Exception:
-                _LOG.debug("Music Assistant reconnect after command failure did not succeed yet", exc_info=True)
             return False

@@ -1,9 +1,31 @@
 # Music Play for Unfolded Circle Remote 3
 
-Version 0.2.5 source build based on the proven packaging/runtime architecture of the Philips Titan OS Remote 3 integration, with all Philips-specific communication removed.
+> **Unofficial community project:** Music Play is an unofficial community integration for Unfolded Circle Remote 3. It is not developed, endorsed, certified, or supported by Unfolded Circle, Music Assistant, Deezer, Home Assistant, or any other music-service provider mentioned in this project.
+
+## Download / Installation
+
+Ready-to-install packages for Unfolded Circle Remote 3 are available under **GitHub Releases**.
+
+1. Open the latest GitHub Release.
+2. Download the Music Play release asset named `uc-intg-music_play-<version>-aarch64.tar.gz`.
+3. Open the Unfolded Circle Remote 3 web configurator.
+4. Install/upload that `.tar.gz` archive as a custom integration.
+5. Run the Music Play setup on Remote 3.
+
+**Important:** download the `uc-intg-music_play-<version>-aarch64.tar.gz` file from the release assets. Do **not** use GitHub's automatically generated **Source code (zip)** or **Source code (tar.gz)** archives for installation on Remote 3.
 
 
-## v0.2.6 setup fix
+Version 0.2.4 source build based on the proven packaging/runtime architecture of the Philips Titan OS Remote 3 integration, with all Philips-specific communication removed.
+
+
+## v0.2.5 – Standby keepalive fix
+
+- Keeps the existing Music Assistant websocket and polling connection alive when Remote 3 enters display standby.
+- Overrides the ucapi-framework default standby behavior which otherwise disconnects the device instance.
+- Avoids an unnecessary reconnect/websocket lifecycle on `exit_standby`.
+- Playback, browse, commands, setup, entity/icon handling and saved configuration are unchanged.
+
+## v0.2.4 setup fix
 
 - Removes the Music Assistant websocket/API validation from inside the UC setup transaction.
 - The setup form now stores URL/token first; the normal device lifecycle performs the authenticated MA connection afterwards.
@@ -16,7 +38,7 @@ Remote 3 -> Music Play integration -> local Music Assistant -> Deezer music prov
 
 Home Assistant is not required.
 
-## v0.2.6 scope
+## v0.2.4 scope
 
 - Native UC media-player entity with dynamic Now Playing metadata and album artwork URL
 - Play/Pause, Stop, Previous, Next
@@ -60,18 +82,18 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 - The source ZIP is intended for GitHub Actions AArch64 packaging. The workflow creates the Remote-3 `.tar.gz` artifact in the same proven root layout as the Titan project.
 
 
-## v0.2.6 connection/setup fix
+## v0.2.4 connection/setup fix
 - Fresh Remote 3 driver ID `deezer_music_play` to avoid stale icon/config association.
 - Music Assistant listener now waits for authenticated initial state before polling players.
 - Existing Titan-derived package layout remains unchanged.
 
 
-## v0.2.6 setup/device fix
+## v0.2.4 setup/device fix
 - Implements the mandatory `PollingDevice.log_id` property in `DeezerDevice`.
 - Fixes `Can't instantiate abstract class DeezerDevice with abstract method log_id`.
 - No changes to Music Assistant URL/token handling, HEOS player logic, or package layout.
 
-## v0.2.6
+## v0.2.4
 - Visible integration name changed to **Music Play**.
 - New driver ID `music_play`.
 - Removed the second visible helper RemoteEntity (`... Tasten`); only the native media-player is exposed.
@@ -79,7 +101,7 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 - Added startup compatibility for Music Assistant client releases with and without `init_ready`.
 - Music Play is provider-agnostic: Deezer, Tidal, Spotify and other sources configured in Music Assistant can be browsed/played through the same integration where supported by Music Assistant.
 
-## v0.2.6 multimedia / browse update
+## v0.2.4 multimedia / browse update
 - Native Remote 3 media browser with playlists, library tracks, albums, artists and current queue.
 - Native search for tracks, playlists, albums and artists.
 - Play actions: Play now, Play next, Add to queue.
@@ -89,14 +111,14 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 - Keeps a single visible MediaPlayer entity; no second helper "Tasten" device.
 - Playback controls remain native media-player features: Play/Pause, Stop, Previous, Next, volume, mute, seek, shuffle and repeat.
 
-## v0.2.6 fixes
+## v0.2.4 fixes
 - Fixes playlist/album/track browsing failures caused by UC's 255-character `media_id` limit by using compact local reference tokens.
 - Uses Music Assistant's `elapsed_time_last_updated` as the UC playback-position anchor so the Remote can extrapolate elapsed playback time correctly.
 - Uses Music Assistant's canonical artwork resolver for Now Playing where available.
 - Uses schema-31 `MediaItemImage.proxy_id` for browser artwork (`/imageproxy/<proxy_id>`).
 - Adds the Music Play custom icon explicitly to the media-player entity overview.
 
-## v0.2.6 transport / progress / physical buttons
+## v0.2.4 transport / progress / physical buttons
 - STOP now uses Music Assistant's canonical `player_queues/stop` and resets the local position.
 - Absolute seek uses integer seconds through `PlayerQueues.seek` where available.
 - DPAD left/right skip -10/+10 seconds via Music Assistant's queue `skip` command.
@@ -108,7 +130,7 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 - `SHUFFLE_TOGGLE` is exposed as a simple command for manual mapping to an extra programmable key.
 - Note: Music Assistant / UC expose shuffle as a boolean ON/OFF state; there is no separate official third `SHUFFLE ALL` mode.
 
-## v0.2.6 playlist playback / entity icon fix
+## v0.2.4 playlist playback / entity icon fix
 - Uses unique `music-play-logo.png` for driver and media-player entity to avoid cross-integration icon collisions.
 - Uses canonical Music Assistant URIs as browse/play media IDs whenever available.
 - Removes RAM-only hashed media references which could no longer resolve after reconnect/reload.
@@ -116,17 +138,41 @@ Album artwork is passed to UC as a dynamic `media_image_url` from the current Mu
 - Normalizes UC play actions robustly.
 
 
-## v0.2.6 critical command fix
+## v0.2.4 critical command fix
 - Restores `send()` as a method of `DeezerDevice`.
 - Fixes the playlist playback 500 error `AttributeError: DeezerDevice has no attribute send`.
 - Keeps canonical Music Assistant track URIs and the unique Music Play icon resource.
 
-## v0.2.6 search debounce
-- Adds an 800 ms debounce to native Remote 3 media search.
-- Rapid intermediate search requests are discarded before contacting Music Assistant.
-- No minimum query length: short artist/title names remain searchable.
-- Search remains Music Assistant global search, so combinations/partial words work; for an unambiguous track use the documented `Artist - Title` form.
+## v0.2.6
 
+- Keep the existing device connection alive during Remote 3 display standby.
+- Reduce background polling during standby to 30 seconds; restore 10 seconds on wake without reconnecting.
 
-### v0.2.6
-Remote-reboot recovery: repeated UC CONNECT events are serialized and reuse a healthy Music Assistant session. Polling and commands reconnect a dropped MA listener automatically.
+## v0.3.1
+
+Music Play remains a Remote-3-focused alternative to generic Music Assistant integrations.
+
+New in v0.3.1:
+
+- Music Assistant server discovery over mDNS (`_mass._tcp.local.`) while manual URL setup remains available.
+- Proper paging for library lists and queue browsing instead of loading large fixed lists.
+- Radio library and radio search results.
+- Artist → album → track drill-down navigation.
+- `ADD_TO_FAVORITES` simple command for the currently playing item where supported by the installed Music Assistant client/server.
+- Preserves the 800 ms search debounce, one visible MediaPlayer entity, queue actions, DPAD seeking/navigation, local progress tracking, unique Music Play icon and standby/reconnect behavior.
+
+### Related Music Assistant Remote 3 project
+
+The public MPL-2.0 project `jackjpowell/uc-intg-musicassistant` was reviewed as a
+feature/interoperability reference. Music Play does **not** copy its source files.
+The v0.3.1 additions were implemented independently against the public Music
+Assistant and Unfolded Circle APIs while keeping Music Play's existing UX and
+architecture. See [`docs/RELATED_PROJECTS.md`](docs/RELATED_PROJECTS.md) for details.
+
+## v0.3.1
+
+- Physical **STOP** remains mapped to a full Music Assistant queue stop.
+- Physical **POWER** now performs a two-step action: stop the active Music Assistant queue, then power off the selected Music Assistant playback device if that player exposes power control.
+- For a Denon/HEOS player this means stopping playback first and then sending player power-off/standby through Music Assistant.
+- Setup can now use either an existing Long-Lived Access Token **or** Music Assistant username/password. When credentials are used, Music Play calls the official Music Assistant client authentication helper once, creates a Long-Lived Token named `Music Play Remote 3`, stores the token in the integration configuration, and does not need the password for later connections.
+- Manual token entry remains supported as a fallback.

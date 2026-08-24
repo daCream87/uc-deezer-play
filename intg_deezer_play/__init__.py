@@ -10,9 +10,10 @@ from ucapi_framework import BaseConfigManager, get_config_path
 
 from intg_deezer_play.config import DeezerConfig
 from intg_deezer_play.driver import DeezerDriver
+from intg_deezer_play.discovery import MusicAssistantDiscovery
 from intg_deezer_play.setup_flow import DeezerSetupFlow
 
-__version__ = "0.2.6"
+__version__ = "0.3.1"
 _LOG = logging.getLogger(__name__)
 
 
@@ -40,7 +41,10 @@ async def main():
     )
     driver.config_manager = config_manager
 
-    setup_handler = DeezerSetupFlow.create_handler(driver)
+    setup_handler = DeezerSetupFlow.create_handler(
+        driver,
+        discovery=MusicAssistantDiscovery(timeout=4),
+    )
     await driver.api.init(str(manifest), setup_handler)
     await driver.register_all_device_instances(connect=False)
 

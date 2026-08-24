@@ -1,6 +1,6 @@
 {
   "driver_id": "music_play",
-  "version": "0.2.6",
+  "version": "0.3.1",
   "min_core_api": "0.22.0",
   "name": {
     "en": "Music Play",
@@ -8,8 +8,8 @@
   },
   "icon": "custom:music-play-logo.png",
   "description": {
-    "en": "Music control for Remote 3 through a local Music Assistant server. Works with music providers configured in Music Assistant.",
-    "de": "Musiksteuerung für Remote 3 über einen lokalen Music-Assistant-Server. Funktioniert mit den in Music Assistant eingerichteten Musikquellen."
+    "en": "Remote-3 focused Music Assistant controller with browsing, search, queue, radio, favorites and playback controls.",
+    "de": "Für Remote 3 optimierte Music-Assistant-Steuerung mit Browser, Suche, Warteschlange, Radio, Favoriten und Wiedergabesteuerung."
   },
   "developer": {
     "name": "Oliver Berndt",
@@ -18,15 +18,15 @@
   },
   "home_page": "https://github.com/daCream87/uc-deezer-play",
   "documentation": "https://github.com/daCream87/uc-deezer-play/blob/main/README.md",
-  "release_date": "2026-08-13",
+  "release_date": "2026-08-24",
   "setup_data_schema": {
     "title": {
       "en": "Music Play Configuration",
       "de": "Music Play einrichten"
     },
     "description": {
-      "en": "Enter the local Music Assistant address and long-lived access token.",
-      "de": "Lokale Music-Assistant-Adresse und Long-Lived Access Token eingeben."
+      "en": "Enter the local Music Assistant address and either a long-lived token or Music Assistant username/password. Music Play creates and stores a long-lived token after successful login.",
+      "de": "Lokale Music-Assistant-Adresse und entweder einen Long-Lived Access Token oder Music-Assistant-Benutzername/Passwort eingeben. Music Play erzeugt nach erfolgreicher Anmeldung einen Long-Lived Token und speichert nur diesen."
     },
     "settings": [
       {
@@ -46,5 +46,5 @@
       }
     ]
   },
-  "device_discovery": false
+  "device_discovery": true
 }
