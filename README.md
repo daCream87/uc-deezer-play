@@ -2,6 +2,25 @@
 
 > **Unofficial community project:** Music Play is an unofficial community integration for Unfolded Circle Remote 3. It is not developed, endorsed, certified, or supported by Unfolded Circle, Music Assistant, Deezer, Home Assistant, or any other music-service provider mentioned in this project.
 
+
+## 📦 Releases & Installation
+
+**Public releases are created automatically.**  
+Whenever a new version is committed to `main`, GitHub Actions reads the version from `driver.json`. If the matching tag (for example `v0.3.1`) does not exist yet, the workflow automatically:
+
+1. builds and validates the Remote 3 AArch64 integration,
+2. creates the matching Git tag,
+3. creates the GitHub Release,
+4. attaches the installable Remote 3 archive.
+
+For installation, always download the release asset named like:
+
+`uc-intg-music_play-<version>-aarch64.tar.gz`
+
+**Do not use GitHub's automatically generated “Source code (.zip)” or “Source code (.tar.gz)” archives for installation.**
+
+If the same version already has a release tag, later commits with that unchanged version are still built and validated, but **do not create another public release**. Increase the version in `driver.json` for the next public release.
+
 ## Download / Installation
 
 Ready-to-install packages for Unfolded Circle Remote 3 are available under **GitHub Releases**.
