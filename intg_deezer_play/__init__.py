@@ -13,7 +13,7 @@ from intg_deezer_play.driver import DeezerDriver
 from intg_deezer_play.discovery import MusicAssistantDiscovery
 from intg_deezer_play.setup_flow import DeezerSetupFlow
 
-__version__ = "0.3.1"
+__version__ = "0.3.3"
 _LOG = logging.getLogger(__name__)
 
 

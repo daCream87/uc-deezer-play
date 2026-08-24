@@ -133,14 +133,19 @@ jobs:
           from pathlib import Path
           source = Path("intg_deezer_play/setup_flow.py").read_text(encoding="utf-8")
           config = Path("intg_deezer_play/config.py").read_text(encoding="utf-8")
+          assert "prepare_input_from_discovery" in source
+          assert "_authentication_form" in source
+          assert "handle_additional_configuration_response" in source
           assert "create_long_lived_token" in source
+          assert "MusicPlayMAClient" in source
+          assert "self._pending_device_config" in source
           assert '"username"' in source
           assert '"password"' in source
           assert '"access_token"' in source
           assert "username:" not in config
           assert "password:" not in config
           compile(source, "setup_flow.py", "exec")
-          print("Setup flow validated: token or username/password; credentials are not persisted")
+          print("Setup flow validated: discover/select -> auth screen -> token validation -> save")
           PY
           jq -e --arg v "$VERSION" '.driver_id == "music_play" and .version == $v' artifacts/driver.json >/dev/null
           python - <<'PY'

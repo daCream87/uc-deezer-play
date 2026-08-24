@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.3.3
+
+### Fixed
+- Fixed the discovered-device setup flow. Selecting an automatically discovered Music Assistant server now opens the authentication screen instead of immediately failing with `NOT_FOUND`.
+- Setup flow is now explicitly: **discover/select server → login screen → validate credentials/token → save configuration**.
+- Music Assistant username/password can be used to create a dedicated long-lived `Music Play Remote 3` token; only the resulting token is stored.
+- Existing Long-Lived Access Token entry remains supported.
+- The resulting token is validated against Music Assistant before the setup is saved.
+- Corrected the internal startup version string so it matches `driver.json`.
+
 ## v0.3.2
 
 ### Fixed

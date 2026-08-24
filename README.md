@@ -27,6 +27,21 @@ Ready-to-install packages for Unfolded Circle Remote 3 are available under **Git
 - **POWER** stops playback first and then powers off / puts the selected playback device into standby when the Music Assistant player supports power control.
 - Power is implemented through the Remote entity button mapping, not through an unsupported media-player `POWER` feature.
 
+
+### Setup / Login
+
+Music Play can discover a local Music Assistant server automatically via mDNS.
+
+The setup sequence is:
+
+1. Select the discovered Music Assistant server (or choose manual setup).
+2. Enter either:
+   - an existing **Long-Lived Access Token**, or
+   - your **Music Assistant username and password**.
+3. When username/password are used, Music Play creates a dedicated long-lived token and validates it.
+4. Only the resulting access token is stored in the Music Play configuration; username and password are not persisted.
+
+
 ## v0.2.5 – Standby keepalive fix
 
 - Keeps the existing Music Assistant websocket and polling connection alive when Remote 3 enters display standby.
