@@ -5,6 +5,11 @@
 
 ## 📦 Releases & Installation
 
+### ⬇️ Download the latest release
+
+**[Download the latest Music Play release](https://github.com/daCream87/uc-deezer-play/releases/latest)**
+
+
 **Public releases are created automatically.**  
 Whenever a new version is committed to `main`, GitHub Actions reads the version from `driver.json`. If the matching tag (for example `v0.3.1`) does not exist yet, the workflow automatically:
 
