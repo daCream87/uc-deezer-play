@@ -178,15 +178,16 @@ class MusicPlayMAClient:
         return list(rows or [])
 
     async def queue(self, player_id: str) -> Any:
+        """Return the actual active Music Assistant queue for a player.
+
+        Newer Music Assistant versions expose get_active_queue(player_id)
+        explicitly. Prefer it before falling back to the historical assumption
+        that queue_id == player_id. This also handles grouped players correctly.
+        """
         if not self.client:
             raise ConnectionError("Music Assistant is not connected")
 
         queues = self.client.player_queues
-        get_fn = getattr(queues, "get", None)
-        if callable(get_fn):
-            queue = get_fn(player_id)
-            if queue is not None:
-                return queue
 
         get_active = getattr(queues, "get_active_queue", None)
         if callable(get_active):
@@ -194,4 +195,23 @@ class MusicPlayMAClient:
             if queue is not None:
                 return queue
 
+        # Current Player models expose active_source. If it points to a cached
+        # Music Assistant queue, resolve that queue before trying player_id.
+        players = getattr(self.client, "players", None)
+        player_get = getattr(players, "get", None)
+        queue_get = getattr(queues, "get", None)
+        if callable(player_get) and callable(queue_get):
+            player = player_get(player_id)
+            active_source = getattr(player, "active_source", None) if player else None
+            if active_source:
+                queue = queue_get(str(active_source))
+                if queue is not None:
+                    return queue
+
+        if callable(queue_get):
+            queue = queue_get(player_id)
+            if queue is not None:
+                return queue
+
+        # Compatibility fallback for older servers/clients.
         return await self.command("player_queues/get", queue_id=player_id)

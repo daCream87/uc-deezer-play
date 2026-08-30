@@ -96,6 +96,20 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           media = Path("intg_deezer_play/media_player.py").read_text(encoding="utf-8")
+          ma = Path("intg_deezer_play/ma_client.py").read_text(encoding="utf-8")
+          device = Path("intg_deezer_play/device.py").read_text(encoding="utf-8")
+          assert 'media_id == "root"' in media
+          assert "focus_current=True" in media
+          assert '"musicplay://overview"' in media
+          assert '"Läuft gerade"' in media
+          assert 'getattr(queue, "sources"' in media
+          assert "get_active_queue" in ma
+          assert "queue_id: str" in device
+          print("Current-playlist list-button behavior validated")
+          PY
+          python - <<'PY'
+          from pathlib import Path
+          media = Path("intg_deezer_play/media_player.py").read_text(encoding="utf-8")
           device = Path("intg_deezer_play/device.py").read_text(encoding="utf-8")
           setup = Path("intg_deezer_play/setup_flow.py").read_text(encoding="utf-8")
           ma = Path("intg_deezer_play/ma_client.py").read_text(encoding="utf-8")

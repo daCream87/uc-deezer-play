@@ -3,6 +3,14 @@
 > **Unofficial community project:** Music Play is an unofficial community integration for Unfolded Circle Remote 3. It is not developed, endorsed, certified, or supported by Unfolded Circle, Music Assistant, Deezer, Home Assistant, or any other music-service provider mentioned in this project.
 
 
+
+### Current playlist shortcut
+
+Pressing the Remote 3 media **list** button now opens the currently active Music Assistant playback queue directly. Music Play automatically opens the page containing the active track and marks it with `▶ Läuft gerade`.
+
+If Music Assistant reports a queue source (for example a playlist), its name is used as the list title. Use **Musikübersicht** at the top of the list to return to the normal library browser.
+
+
 ## Download / Installation
 
 Ready-to-install packages for Unfolded Circle Remote 3 are available under **GitHub Releases**.

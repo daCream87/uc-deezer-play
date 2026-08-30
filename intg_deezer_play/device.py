@@ -36,6 +36,7 @@ class MusicState:
     online: bool = False
     player_id: str = ""
     player_name: str = ""
+    queue_id: str = ""
     players: list[tuple[str, str]] = field(default_factory=list)
     state: str = "IDLE"
     volume: int = 0
@@ -316,6 +317,7 @@ class DeezerDevice(PollingDevice):
         self._state = MusicState(
             online=True,
             player_id=player_id,
+            queue_id=str(_get(queue, "queue_id", player_id) or player_id),
             player_name=str(
                 _get(selected, "display_name", _get(selected, "name", player_id))
             ),
@@ -388,12 +390,24 @@ class DeezerDevice(PollingDevice):
         pid = self._state.player_id
         if not pid:
             return []
-        rows = await self._client.command(
-            "player_queues/items",
-            queue_id=pid,
-            limit=limit,
-            offset=offset,
-        )
+
+        await self._ensure_ma_connected()
+        queue = await self._client.queue(pid)
+        queue_id = str(_get(queue, "queue_id", self._state.queue_id or pid) or pid)
+        self._state.queue_id = queue_id
+
+        ma = self._client.client
+        queues = getattr(ma, "player_queues", None) if ma else None
+        get_items = getattr(queues, "get_queue_items", None)
+        if callable(get_items):
+            rows = await get_items(queue_id, limit=limit, offset=offset)
+        else:
+            rows = await self._client.command(
+                "player_queues/items",
+                queue_id=queue_id,
+                limit=limit,
+                offset=offset,
+            )
         return list(rows or [])
 
     async def send(self, command: str, **kwargs) -> bool:
@@ -406,19 +420,35 @@ class DeezerDevice(PollingDevice):
             ma = self._client.client
             queues = getattr(ma, "player_queues", None) if ma else None
 
+            # Queue commands target the actual active queue. With recent
+            # Music Assistant versions this is not guaranteed to equal player_id
+            # (e.g. groups/synced players).
+            qid = self._state.queue_id or pid
+            try:
+                active_queue = await self._client.queue(pid)
+                qid = str(_get(active_queue, "queue_id", qid) or qid)
+                self._state.queue_id = qid
+            except Exception:
+                _LOG.debug(
+                    "Could not resolve active queue for %s; using %s",
+                    pid,
+                    qid,
+                    exc_info=True,
+                )
+
             if command == "play_pause":
                 if queues and hasattr(queues, "play_pause"):
-                    await queues.play_pause(pid)
+                    await queues.play_pause(qid)
                 else:
-                    await self._client.command("player_queues/play_pause", queue_id=pid)
+                    await self._client.command("player_queues/play_pause", queue_id=qid)
 
             elif command == "stop":
                 # Stop the active Music Assistant queue, not only the physical
                 # renderer. This is the canonical MA STOP operation.
                 if queues and hasattr(queues, "stop"):
-                    await queues.stop(pid)
+                    await queues.stop(qid)
                 else:
-                    await self._client.command("player_queues/stop", queue_id=pid)
+                    await self._client.command("player_queues/stop", queue_id=qid)
                 self._state.state = "IDLE"
                 self._state.position = 0
                 self._state.position_updated_at = time.time()
@@ -426,24 +456,24 @@ class DeezerDevice(PollingDevice):
 
             elif command == "next":
                 if queues and hasattr(queues, "next"):
-                    await queues.next(pid)
+                    await queues.next(qid)
                 else:
-                    await self._client.command("player_queues/next", queue_id=pid)
+                    await self._client.command("player_queues/next", queue_id=qid)
 
             elif command == "previous":
                 if queues and hasattr(queues, "previous"):
-                    await queues.previous(pid)
+                    await queues.previous(qid)
                 else:
-                    await self._client.command("player_queues/previous", queue_id=pid)
+                    await self._client.command("player_queues/previous", queue_id=qid)
 
             elif command == "play_index":
                 index = int(kwargs["index"])
                 if queues and hasattr(queues, "play_index"):
-                    await queues.play_index(pid, index)
+                    await queues.play_index(qid, index)
                 else:
                     await self._client.command(
                         "player_queues/play_index",
-                        queue_id=pid,
+                        queue_id=qid,
                         index=index,
                     )
 
@@ -452,11 +482,11 @@ class DeezerDevice(PollingDevice):
                 if not seconds:
                     return True
                 if queues and hasattr(queues, "skip"):
-                    await queues.skip(pid, seconds)
+                    await queues.skip(qid, seconds)
                 else:
                     await self._client.command(
                         "player_queues/skip",
-                        queue_id=pid,
+                        queue_id=qid,
                         seconds=seconds,
                     )
                 self._state.position = max(
@@ -476,11 +506,11 @@ class DeezerDevice(PollingDevice):
                 else:
                     target = max(0, target)
                 if queues and hasattr(queues, "seek"):
-                    await queues.seek(pid, target)
+                    await queues.seek(qid, target)
                 else:
                     await self._client.command(
                         "player_queues/seek",
-                        queue_id=pid,
+                        queue_id=qid,
                         position=target,
                     )
                 # Optimistic anchor avoids the slider snapping back while MA
@@ -522,11 +552,11 @@ class DeezerDevice(PollingDevice):
             elif command == "stop_and_power_off":
                 # First stop the MA queue, then power off the selected renderer.
                 if queues and hasattr(queues, "stop"):
-                    await queues.stop(pid)
+                    await queues.stop(qid)
                 else:
                     await self._client.command(
                         "player_queues/stop",
-                        queue_id=pid,
+                        queue_id=qid,
                     )
 
                 ma = self._client.client
@@ -562,11 +592,11 @@ class DeezerDevice(PollingDevice):
             elif command == "shuffle":
                 enabled = bool(kwargs["enabled"])
                 if queues and hasattr(queues, "shuffle"):
-                    await queues.shuffle(pid, enabled)
+                    await queues.shuffle(qid, enabled)
                 else:
                     await self._client.command(
                         "player_queues/shuffle",
-                        queue_id=pid,
+                        queue_id=qid,
                         shuffle_enabled=enabled,
                     )
                 self._state.shuffle = enabled
@@ -576,7 +606,7 @@ class DeezerDevice(PollingDevice):
                 mode = str(kwargs["mode"]).lower().split(".")[-1]
                 await self._client.command(
                     "player_queues/repeat",
-                    queue_id=pid,
+                    queue_id=qid,
                     repeat_mode=mode,
                 )
 
@@ -589,9 +619,9 @@ class DeezerDevice(PollingDevice):
 
             elif command == "clear_queue":
                 if queues and hasattr(queues, "clear"):
-                    await queues.clear(pid)
+                    await queues.clear(qid)
                 else:
-                    await self._client.command("player_queues/clear", queue_id=pid)
+                    await self._client.command("player_queues/clear", queue_id=qid)
 
             elif command == "play_playlist":
                 playlist_uri = str(kwargs["playlist_uri"]).strip()
@@ -605,10 +635,10 @@ class DeezerDevice(PollingDevice):
                 desired_shuffle = bool(self._state.shuffle)
                 if desired_shuffle:
                     if queues and hasattr(queues, "shuffle"):
-                        await queues.shuffle(pid, False)
+                        await queues.shuffle(qid, False)
                     else:
                         await self._client.command(
-                            "player_queues/shuffle", queue_id=pid, shuffle_enabled=False
+                            "player_queues/shuffle", queue_id=qid, shuffle_enabled=False
                         )
 
                 try:
@@ -619,7 +649,7 @@ class DeezerDevice(PollingDevice):
 
                 if queues and hasattr(queues, "play_media"):
                     await queues.play_media(
-                        pid,
+                        qid,
                         playlist_uri,
                         option=replace_option,
                         radio_mode=False,
@@ -628,7 +658,7 @@ class DeezerDevice(PollingDevice):
                 else:
                     await self._client.command(
                         "player_queues/play_media",
-                        queue_id=pid,
+                        queue_id=qid,
                         media=playlist_uri,
                         option="replace",
                         radio_mode=False,
@@ -637,10 +667,10 @@ class DeezerDevice(PollingDevice):
 
                 if desired_shuffle:
                     if queues and hasattr(queues, "shuffle"):
-                        await queues.shuffle(pid, True)
+                        await queues.shuffle(qid, True)
                     else:
                         await self._client.command(
-                            "player_queues/shuffle", queue_id=pid, shuffle_enabled=True
+                            "player_queues/shuffle", queue_id=qid, shuffle_enabled=True
                         )
 
             elif command == "play_media":
@@ -662,14 +692,14 @@ class DeezerDevice(PollingDevice):
                         queue_option = option_name
 
                     await queues.play_media(
-                        pid,
+                        qid,
                         media_id,
                         option=queue_option,
                     )
                 else:
                     await self._client.command(
                         "player_queues/play_media",
-                        queue_id=pid,
+                        queue_id=qid,
                         media=media_id,
                         option=option_name,
                     )

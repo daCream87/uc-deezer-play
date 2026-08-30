@@ -331,79 +331,34 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             media_id = options.media_id or "root"
 
             if media_id == "root":
-                if self._open_last_playlist_once and self._last_playlist_ref:
-                    self._open_last_playlist_once = False
-                    return await self._browse_playlist(self._last_playlist_ref, options)
+                # The Remote 3 list button opens the media browser at root.
+                # If Music Assistant has an active queue, show the CURRENT
+                # playback list immediately and focus the page containing the
+                # currently playing item. This is more useful than always
+                # landing on the generic library overview.
+                try:
+                    queue = await self._device._client.queue(
+                        self._device.state.player_id
+                    )
+                    current_item = getattr(queue, "current_item", None)
+                    item_count = int(getattr(queue, "items", 0) or 0)
+                    if current_item is not None and item_count > 0:
+                        return await self._browse_queue(
+                            options,
+                            focus_current=True,
+                            include_overview=True,
+                            queue=queue,
+                        )
+                except Exception:
+                    _LOG.debug(
+                        "No active queue available for list-button shortcut",
+                        exc_info=True,
+                    )
 
-                items = [
-                    BrowseMediaItem(
-                        media_id="musicplay://queue",
-                        title="Warteschlange",
-                        subtitle="Aktuelle Abspielreihenfolge",
-                        media_class=MediaClass.PLAYLIST,
-                        can_browse=True,
-                        thumbnail="icon://uc:playlist",
-                    ),
-                    BrowseMediaItem(
-                        media_id="musicplay://playlists",
-                        title="Wiedergabelisten",
-                        subtitle="Playlists aus Music Assistant",
-                        media_class=MediaClass.DIRECTORY,
-                        can_browse=True,
-                        can_search=True,
-                        thumbnail="icon://uc:playlist",
-                    ),
-                    BrowseMediaItem(
-                        media_id="musicplay://tracks",
-                        title="Titel / Favoriten",
-                        media_class=MediaClass.DIRECTORY,
-                        can_browse=True,
-                        can_search=True,
-                        thumbnail="icon://uc:favorite",
-                    ),
-                    BrowseMediaItem(
-                        media_id="musicplay://albums",
-                        title="Alben",
-                        media_class=MediaClass.DIRECTORY,
-                        can_browse=True,
-                        can_search=True,
-                        thumbnail="icon://uc:album",
-                    ),
-                    BrowseMediaItem(
-                        media_id="musicplay://artists",
-                        title="Künstler",
-                        media_class=MediaClass.DIRECTORY,
-                        can_browse=True,
-                        can_search=True,
-                        thumbnail="icon://uc:artist",
-                    ),
-                    BrowseMediaItem(
-                        media_id="musicplay://radio",
-                        title="Radio",
-                        media_class=MediaClass.RADIO,
-                        can_browse=True,
-                        can_search=True,
-                        thumbnail="icon://uc:radio",
-                    ),
-                ]
-                root = BrowseMediaItem(
-                    media_id="root",
-                    title="Music Play",
-                    subtitle=self._device.state.player_name or None,
-                    media_class=MediaClass.MUSIC,
-                    can_browse=True,
-                    can_search=True,
-                    thumbnail="icon://uc:music",
-                    items=items,
-                )
-                return BrowseResults(
-                    media=root,
-                    pagination=Pagination(
-                        page=1,
-                        limit=len(items),
-                        count=len(items),
-                    ),
-                )
+                return await self._browse_overview(options)
+
+            if media_id == "musicplay://overview":
+                return await self._browse_overview(options)
 
             if media_id == "musicplay://queue":
                 return await self._browse_queue(options)
@@ -454,6 +409,81 @@ class DeezerMediaPlayer(MediaPlayerEntity):
         except Exception:
             _LOG.exception("Browse failed: %s", options)
             return StatusCodes.SERVER_ERROR
+
+    async def _browse_overview(
+        self,
+        options: BrowseOptions,
+    ) -> BrowseResults:
+        """Return the original Music Play library overview."""
+        items = [
+            BrowseMediaItem(
+                media_id="musicplay://queue",
+                title="Aktuelle Wiedergabeliste",
+                subtitle="Aktuelle Abspielreihenfolge",
+                media_class=MediaClass.PLAYLIST,
+                can_browse=True,
+                thumbnail="icon://uc:playlist",
+            ),
+            BrowseMediaItem(
+                media_id="musicplay://playlists",
+                title="Wiedergabelisten",
+                subtitle="Playlists aus Music Assistant",
+                media_class=MediaClass.DIRECTORY,
+                can_browse=True,
+                can_search=True,
+                thumbnail="icon://uc:playlist",
+            ),
+            BrowseMediaItem(
+                media_id="musicplay://tracks",
+                title="Titel / Favoriten",
+                media_class=MediaClass.DIRECTORY,
+                can_browse=True,
+                can_search=True,
+                thumbnail="icon://uc:favorite",
+            ),
+            BrowseMediaItem(
+                media_id="musicplay://albums",
+                title="Alben",
+                media_class=MediaClass.DIRECTORY,
+                can_browse=True,
+                can_search=True,
+                thumbnail="icon://uc:album",
+            ),
+            BrowseMediaItem(
+                media_id="musicplay://artists",
+                title="Künstler",
+                media_class=MediaClass.DIRECTORY,
+                can_browse=True,
+                can_search=True,
+                thumbnail="icon://uc:artist",
+            ),
+            BrowseMediaItem(
+                media_id="musicplay://radio",
+                title="Radio",
+                media_class=MediaClass.RADIO,
+                can_browse=True,
+                can_search=True,
+                thumbnail="icon://uc:radio",
+            ),
+        ]
+        root = BrowseMediaItem(
+            media_id="musicplay://overview",
+            title="Music Play",
+            subtitle=self._device.state.player_name or None,
+            media_class=MediaClass.MUSIC,
+            can_browse=True,
+            can_search=True,
+            thumbnail="icon://uc:music",
+            items=items,
+        )
+        return BrowseResults(
+            media=root,
+            pagination=Pagination(
+                page=1,
+                limit=len(items),
+                count=len(items),
+            ),
+        )
 
     async def _browse_library(
         self,
@@ -635,40 +665,139 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             pagination=self._pagination(page, limit, len(items), offset),
         )
 
-    async def _browse_queue(self, options: BrowseOptions) -> BrowseResults:
+    async def _browse_queue(
+        self,
+        options: BrowseOptions,
+        *,
+        focus_current: bool = False,
+        include_overview: bool = False,
+        queue: Any | None = None,
+    ) -> BrowseResults:
+        """Browse the active Music Assistant queue.
+
+        When opened from the entity's list button (root browse), focus_current
+        selects the page containing current_index so the playing title is
+        visible immediately instead of always showing page 1.
+        """
         page, limit, offset = self._paging(options)
-        rows = await self._device.queue_items(limit=limit, offset=offset)
 
-        current_index = 0
-        try:
-            queue = await self._device._client.queue(self._device.state.player_id)
-            current_index = int(getattr(queue, "current_index", 0) or 0)
-        except Exception:
-            pass
+        if queue is None:
+            queue = await self._device._client.queue(
+                self._device.state.player_id
+            )
 
-        items = []
+        current_index_raw = getattr(queue, "current_index", None)
+        current_index = (
+            int(current_index_raw)
+            if current_index_raw is not None
+            else 0
+        )
+        total_items = int(getattr(queue, "items", 0) or 0)
+        queue_id = str(
+            getattr(queue, "queue_id", "")
+            or self._device.state.queue_id
+            or self._device.state.player_id
+        )
+        if queue_id:
+            self._device.state.queue_id = queue_id
+
+        if focus_current and total_items > 0:
+            # Jump directly to the page that contains the playing item.
+            page = max(1, (current_index // limit) + 1)
+            offset = (page - 1) * limit
+
+        rows = await self._device.queue_items(
+            limit=limit,
+            offset=offset,
+        )
+
+        items: list[BrowseMediaItem] = []
+
+        if include_overview:
+            items.append(
+                BrowseMediaItem(
+                    media_id="musicplay://overview",
+                    title="Musikübersicht",
+                    subtitle="Playlists, Alben, Künstler, Suche und Radio",
+                    media_class=MediaClass.DIRECTORY,
+                    can_browse=True,
+                    thumbnail="icon://uc:music",
+                )
+            )
+
         for local_idx, row in enumerate(rows):
             absolute_idx = offset + local_idx
-            media = self._get(row, "media_item", row)
-            item = self._item(media, "track")
+            media_obj = self._get(row, "media_item", row)
+            item = self._item(media_obj, "track")
             item.media_id = f"musicplay://queue-item/{absolute_idx}"
-            marker = "▶" if absolute_idx == current_index else f"{absolute_idx + 1:02d}"
-            item.title = f"{marker}  {item.title}"
-            item.subtitle = item.artist or item.album or None
+
+            is_current = absolute_idx == current_index
+            if is_current:
+                item.title = f"▶  {item.title}"
+                details = " • ".join(
+                    value
+                    for value in (item.artist, item.album)
+                    if value
+                )
+                item.subtitle = (
+                    f"Läuft gerade • {details}"
+                    if details
+                    else "Läuft gerade"
+                )
+            else:
+                item.title = f"{absolute_idx + 1:02d}  {item.title}"
+                item.subtitle = item.artist or item.album or None
+
             item.can_browse = False
             items.append(item)
 
+        # Current Music Assistant PlayerQueue models expose the parent source(s)
+        # of the queue. Use them for a meaningful playlist title when available.
+        source_names: list[str] = []
+        for source in list(getattr(queue, "sources", []) or []):
+            source_name = str(
+                self._get(source, "name", "")
+                or self._get(source, "uri", "")
+            ).strip()
+            if source_name and source_name not in source_names:
+                source_names.append(source_name)
+
+        playlist_title = (
+            " / ".join(source_names[:2])
+            if source_names
+            else "Aktuelle Wiedergabeliste"
+        )
+
+        if total_items > 0:
+            queue_subtitle = (
+                f"Titel {min(current_index + 1, total_items)} von "
+                f"{total_items} • {self._device.state.player_name}"
+            )
+        else:
+            queue_subtitle = self._device.state.player_name or "Music Assistant"
+
         root = BrowseMediaItem(
             media_id="musicplay://queue",
-            title="Warteschlange",
-            subtitle="Reihenfolge der ausgewählten Titel",
+            title=playlist_title,
+            subtitle=queue_subtitle,
             media_class=MediaClass.PLAYLIST,
             can_browse=True,
             items=items,
         )
+
+        count = total_items if total_items > 0 else (
+            offset + len(rows) + (1 if len(rows) == limit else 0)
+        )
+        if include_overview:
+            count += 1
+
         return BrowseResults(
             media=root,
-            pagination=self._pagination(page, limit, len(items), offset),
+            pagination=Pagination(
+                page=page,
+                limit=limit,
+                count=count,
+            ),
         )
 
     async def search(

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.3.5
+
+### Changed
+- The Remote 3 **list/media-browser button** now opens the currently active Music Assistant queue directly instead of always opening the Music Play overview.
+- The browser automatically jumps to the queue page containing the currently playing track.
+- The currently playing track is clearly marked with `▶` and `Läuft gerade`.
+- The queue title uses Music Assistant's current `PlayerQueue.sources` information when available, so a running playlist/source can be shown by name.
+- A **Musikübersicht** entry inside the current queue provides access back to Playlists, Albums, Artists, Favorites, Search and Radio.
+- If no active queue exists, the list button falls back to the normal Music Play overview.
+
+### Compatibility
+- Updated queue handling for current Music Assistant clients: `get_active_queue(player_id)` is preferred and the actual `queue_id` is used for queue browsing and queue commands. This improves grouped/synced player handling where `queue_id` can differ from `player_id`.
+
 ## v0.3.4
 
 ### Fixed
