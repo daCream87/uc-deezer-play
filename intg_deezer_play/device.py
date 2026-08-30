@@ -436,6 +436,17 @@ class DeezerDevice(PollingDevice):
                 else:
                     await self._client.command("player_queues/previous", queue_id=pid)
 
+            elif command == "play_index":
+                index = int(kwargs["index"])
+                if queues and hasattr(queues, "play_index"):
+                    await queues.play_index(pid, index)
+                else:
+                    await self._client.command(
+                        "player_queues/play_index",
+                        queue_id=pid,
+                        index=index,
+                    )
+
             elif command == "skip":
                 seconds = int(round(float(kwargs.get("seconds", 0))))
                 if not seconds:
@@ -581,6 +592,56 @@ class DeezerDevice(PollingDevice):
                     await queues.clear(pid)
                 else:
                     await self._client.command("player_queues/clear", queue_id=pid)
+
+            elif command == "play_playlist":
+                playlist_uri = str(kwargs["playlist_uri"]).strip()
+                start_item = str(kwargs.get("start_item", "") or "").strip()
+                if not playlist_uri:
+                    return False
+
+                # Replace stale queue contents with the selected finite playlist.
+                # radio_mode=False is important: no similar-track radio expansion.
+                # Preserve the user's normal queue Shuffle setting.
+                desired_shuffle = bool(self._state.shuffle)
+                if desired_shuffle:
+                    if queues and hasattr(queues, "shuffle"):
+                        await queues.shuffle(pid, False)
+                    else:
+                        await self._client.command(
+                            "player_queues/shuffle", queue_id=pid, shuffle_enabled=False
+                        )
+
+                try:
+                    from music_assistant_models.enums import QueueOption
+                    replace_option = QueueOption.REPLACE
+                except Exception:
+                    replace_option = "replace"
+
+                if queues and hasattr(queues, "play_media"):
+                    await queues.play_media(
+                        pid,
+                        playlist_uri,
+                        option=replace_option,
+                        radio_mode=False,
+                        start_item=start_item or None,
+                    )
+                else:
+                    await self._client.command(
+                        "player_queues/play_media",
+                        queue_id=pid,
+                        media=playlist_uri,
+                        option="replace",
+                        radio_mode=False,
+                        start_item=start_item or None,
+                    )
+
+                if desired_shuffle:
+                    if queues and hasattr(queues, "shuffle"):
+                        await queues.shuffle(pid, True)
+                    else:
+                        await self._client.command(
+                            "player_queues/shuffle", queue_id=pid, shuffle_enabled=True
+                        )
 
             elif command == "play_media":
                 media_id = str(kwargs["media_id"]).strip()

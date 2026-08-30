@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.3.4
+
+### Fixed
+- Remote 3 lower transport **Next/Previous** keys now change tracks instead of seeking ±10 seconds; DPAD left/right keeps ±10-second seek.
+- Selecting a track inside a playlist now loads the complete selected playlist and starts at that track instead of creating a one-track queue.
+- Playlist playback explicitly uses a finite queue (`radio_mode=False`) and replaces stale queue contents, so normal Shuffle stays inside the selected playlist.
+- Selecting a title in the queue browser now jumps to that existing queue index instead of replacing the queue with a single track.
+- Normal queue Shuffle is preserved when a playlist is loaded.
+
+
 ## v0.3.3
 
 ### Fixed

@@ -43,6 +43,9 @@ class DeezerMediaPlayer(MediaPlayerEntity):
         # This survives reconnects/restarts and stays UC-safe.
         self._last_playlist_ref: dict[str, Any] | None = None
         self._open_last_playlist_once = False
+        # Track the playlist context of browsed tracks so PLAY_NOW loads the
+        # complete selected playlist instead of creating a one-track queue.
+        self._playlist_track_context: dict[str, dict[str, str]] = {}
         super().__init__(
             f"media_player.{device_config.identifier}",
             device_config.name,
@@ -168,9 +171,15 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                 ok = await self._device.send("next")
             elif cmd_id == Commands.PREVIOUS:
                 ok = await self._device.send("previous")
-            elif cmd_id in (Commands.FAST_FORWARD, Commands.CURSOR_RIGHT):
+            elif cmd_id == Commands.FAST_FORWARD:
+                # Remote 3 lower transport key: next track, not +10s seek.
+                ok = await self._device.send("next")
+            elif cmd_id == Commands.REWIND:
+                # Remote 3 lower transport key: previous track, not -10s seek.
+                ok = await self._device.send("previous")
+            elif cmd_id == Commands.CURSOR_RIGHT:
                 ok = await self._device.send("skip", seconds=10)
-            elif cmd_id in (Commands.REWIND, Commands.CURSOR_LEFT):
+            elif cmd_id == Commands.CURSOR_LEFT:
                 ok = await self._device.send("skip", seconds=-10)
             elif cmd_id == Commands.CURSOR_UP:
                 ok = await self._device.send("next")
@@ -229,41 +238,62 @@ class DeezerMediaPlayer(MediaPlayerEntity):
                 ok = await self._device.send("clear_queue")
             elif cmd_id == Commands.PLAY_MEDIA:
                 raw_id = str(p.get("media_id", "")).strip()
-                ref = self._decode_ref(raw_id)
-                playable_uri = str(ref.get("uri") or raw_id).strip()
-
-                if not playable_uri or playable_uri.startswith("musicplay://"):
-                    _LOG.error(
-                        "PLAY_MEDIA has no playable Music Assistant URI: media_id=%s ref=%s params=%s",
-                        raw_id,
-                        ref,
-                        p,
-                    )
-                    return StatusCodes.BAD_REQUEST
-
                 action = str(
                     p.get("action", MediaPlayAction.PLAY_NOW)
                 ).split(".")[-1].upper()
-                option = {
-                    "PLAY_NOW": "play",
-                    "PLAY_NEXT": "next",
-                    "ADD_TO_QUEUE": "add",
-                    "PLAY": "play",
-                    "NEXT": "next",
-                    "ADD": "add",
-                }.get(action, "play")
 
-                _LOG.info(
-                    "PLAY_MEDIA uri=%s option=%s player=%s",
-                    playable_uri,
-                    option,
-                    self._device.state.player_id,
-                )
-                ok = await self._device.send(
-                    "play_media",
-                    media_id=playable_uri,
-                    option=option,
-                )
+                # Queue browser: selecting an existing queue row must jump to
+                # that row, never replace the queue with a new one-track queue.
+                if raw_id.startswith("musicplay://queue-item/") and action in {"PLAY_NOW", "PLAY", ""}:
+                    try:
+                        queue_index = int(raw_id.rsplit("/", 1)[-1])
+                    except ValueError:
+                        return StatusCodes.BAD_REQUEST
+                    ok = await self._device.send("play_index", index=queue_index)
+                else:
+                    ref = self._decode_ref(raw_id)
+                    playable_uri = str(ref.get("uri") or raw_id).strip()
+
+                    if not playable_uri or playable_uri.startswith("musicplay://"):
+                        _LOG.error(
+                            "PLAY_MEDIA has no playable Music Assistant URI: media_id=%s ref=%s params=%s",
+                            raw_id,
+                            ref,
+                            p,
+                        )
+                        return StatusCodes.BAD_REQUEST
+
+                    option = {
+                        "PLAY_NOW": "play",
+                        "PLAY_NEXT": "next",
+                        "ADD_TO_QUEUE": "add",
+                        "PLAY": "play",
+                        "NEXT": "next",
+                        "ADD": "add",
+                    }.get(action, "play")
+
+                    playlist_context = self._playlist_track_context.get(raw_id)
+                    if playlist_context and option == "play":
+                        # A track chosen inside a playlist means: load exactly
+                        # that playlist and start at the chosen track. This keeps
+                        # Next/Previous and Shuffle scoped to the selected list.
+                        ok = await self._device.send(
+                            "play_playlist",
+                            playlist_uri=playlist_context["playlist_uri"],
+                            start_item=playlist_context["start_item"],
+                        )
+                    else:
+                        _LOG.info(
+                            "PLAY_MEDIA uri=%s option=%s player=%s",
+                            playable_uri,
+                            option,
+                            self._device.state.player_id,
+                        )
+                        ok = await self._device.send(
+                            "play_media",
+                            media_id=playable_uri,
+                            option=option,
+                        )
             else:
                 return StatusCodes.NOT_IMPLEMENTED
 
@@ -492,6 +522,22 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             rows = rows[:limit]
 
         items = [self._item(x, "track") for x in rows]
+        playlist_uri = str(ref.get("uri") or "").strip()
+        if playlist_uri:
+            # Remember each visible playlist track's origin. Music Assistant's
+            # start_item accepts the track item id; fall back to its URI.
+            for row, item in zip(rows, items):
+                track_ref = self._decode_ref(str(item.media_id or ""))
+                start_item = str(
+                    self._get(row, "item_id", "")
+                    or track_ref.get("item_id")
+                    or track_ref.get("uri")
+                    or item.media_id
+                ).strip()
+                self._playlist_track_context[str(item.media_id)] = {
+                    "playlist_uri": playlist_uri,
+                    "start_item": start_item,
+                }
         root = BrowseMediaItem(
             media_id=self._encode_ref(ref),
             title=str(ref.get("name") or "Wiedergabeliste"),
@@ -605,6 +651,7 @@ class DeezerMediaPlayer(MediaPlayerEntity):
             absolute_idx = offset + local_idx
             media = self._get(row, "media_item", row)
             item = self._item(media, "track")
+            item.media_id = f"musicplay://queue-item/{absolute_idx}"
             marker = "▶" if absolute_idx == current_index else f"{absolute_idx + 1:02d}"
             item.title = f"{marker}  {item.title}"
             item.subtitle = item.artist or item.album or None
